@@ -1,4 +1,4 @@
-# API BookList Pro
+# API BookList Pro - v2
 
 API Express fournie pour l'évaluation finale React Native **niveau M2**.
 Elle remplace la v1 (`MaDesOcr/API-BOOKS`) et ajoute : pagination et filtrage serveur,
