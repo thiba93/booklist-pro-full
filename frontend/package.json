@@ -1,0 +1,32 @@
+{
+  "name": "booklist-pro-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint:architecture": "node scripts/check-architecture.mjs",
+    "validate": "npm run typecheck && npm run test && npm run lint:architecture"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "^57.0.15",
+    "expo": "57.0.21",
+    "expo-asset": "57.0.16",
+    "expo-status-bar": "57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.1",
+    "typescript": "^7.0.2",
+    "vitest": "^2.1.9"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

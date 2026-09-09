@@ -1,0 +1,26 @@
+{
+  "name": "api-books-v2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "API Express v2 pour l'evaluation React Native M2 - BookList Pro",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/seed.js",
+    "seed:small": "node src/seed.js 50",
+    "chaos": "CHAOS_LATENCE=1500 CHAOS_ECHEC=0.3 node src/server.js",
+    "auth": "AUTH_REQUIRED=true node src/server.js",
+    "final": "AUTH_REQUIRED=true CHAOS_LATENCE=1500 CHAOS_ECHEC=0.3 node src/server.js",
+    "test:api": "node scripts/smoke-test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

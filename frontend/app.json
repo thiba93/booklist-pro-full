@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "BookList Pro",
+    "slug": "booklist-pro",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "booklistpro",
+    "userInterfaceStyle": "light",
+    "platforms": [
+      "web",
+      "ios",
+      "android"
+    ],
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
