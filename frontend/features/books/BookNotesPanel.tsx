@@ -42,6 +42,7 @@ export function BookNotesPanel({ bookId }: BookNotesPanelProps) {
       />
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <Pressable
+        accessibilityLabel="Ajouter la note"
         accessibilityRole="button"
         accessibilityState={{ disabled: contenu.trim().length === 0 || createNote.isPending }}
         disabled={contenu.trim().length === 0 || createNote.isPending}
