@@ -4,6 +4,7 @@ const cors = require('cors');
 const { charger } = require('./db');
 const { chaos, gestionErreurs, AUTH_REQUISE } = require('./middleware');
 const routesLivres = require('./routes-livres');
+const routesCouvertures = require('./routes-couvertures');
 const routesSysteme = require('./routes-systeme');
 
 const app = express();
@@ -46,6 +47,7 @@ app.get('/health', (req, res) => {
 
 app.use(chaos);
 app.use(routesLivres);
+app.use(routesCouvertures);
 app.use(routesSysteme);
 
 app.use((req, res) => {
