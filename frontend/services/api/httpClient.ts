@@ -1,33 +1,190 @@
+import type { z } from "zod";
+
 import { apiConfig } from "./apiConfig";
+import {
+  type ApiError,
+  mapHttpErrorResponse,
+  mapInvalidResponse,
+  mapNetworkError
+} from "./apiErrors";
+import { authRefreshResponseSchema } from "./schemas";
+
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+type ResponseKind = "json" | "text" | "empty";
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  method?: HttpMethod;
   body?: unknown;
   headers?: Readonly<Record<string, string>>;
+  responseKind?: ResponseKind;
+  signal?: AbortSignal | undefined;
+  skipAuthRefresh?: boolean;
 };
 
-export async function apiRequest<TResponse>(
+type AuthTokens = {
+  accessToken: string;
+  refreshToken?: string;
+};
+
+let authTokens: AuthTokens | null = null;
+let refreshRequest: Promise<string> | null = null;
+
+export function setApiAuthTokens(tokens: AuthTokens) {
+  authTokens = tokens;
+}
+
+export function clearApiAuthTokens() {
+  authTokens = null;
+  refreshRequest = null;
+}
+
+function buildUrl(path: `/${string}`) {
+  return `${apiConfig.baseUrl.replace(/\/$/, "")}${path}`;
+}
+
+function buildHeaders(options: RequestOptions) {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    ...options.headers
+  };
+
+  if (authTokens?.accessToken) {
+    headers.Authorization = `Bearer ${authTokens.accessToken}`;
+  }
+
+  return headers;
+}
+
+async function parseBody(response: Response, responseKind: ResponseKind) {
+  if (responseKind === "empty") {
+    return undefined;
+  }
+
+  const texte = await response.text();
+  if (responseKind === "text") {
+    return texte;
+  }
+
+  if (texte.length === 0) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(texte) as unknown;
+  } catch {
+    throw mapInvalidResponse(response.status, [
+      {
+        code: "custom",
+        message: "JSON invalide",
+        path: []
+      }
+    ]);
+  }
+}
+
+async function send<TResponse>(
   path: `/${string}`,
-  options: RequestOptions = {}
+  schema: z.ZodType<TResponse>,
+  options: RequestOptions
 ) {
-  const requestInit: RequestInit = {
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      ...options.headers
-    },
-    method: options.method ?? "GET"
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const timeoutId = setTimeout(abort, apiConfig.timeoutMs);
+
+  if (options.signal?.aborted) {
+    controller.abort();
+  } else {
+    options.signal?.addEventListener("abort", abort, { once: true });
+  }
+
+  const init: RequestInit = {
+    headers: buildHeaders(options),
+    method: options.method ?? "GET",
+    signal: controller.signal
   };
 
   if (options.body !== undefined) {
-    requestInit.body = JSON.stringify(options.body);
+    init.body = JSON.stringify(options.body);
   }
 
-  const response = await fetch(`${apiConfig.baseUrl}${path}`, requestInit);
+  try {
+    const response = await fetch(buildUrl(path), init);
 
-  if (!response.ok) {
-    throw new Error(`API error ${response.status}`);
+    if (!response.ok) {
+      throw await mapHttpErrorResponse(response);
+    }
+
+    const body = await parseBody(response, options.responseKind ?? "json");
+    const parsed = schema.safeParse(body);
+
+    if (!parsed.success) {
+      throw mapInvalidResponse(response.status, parsed.error.issues);
+    }
+
+    return parsed.data;
+  } catch (error) {
+    if (isApiError(error)) {
+      throw error;
+    }
+
+    throw mapNetworkError(error);
+  } finally {
+    clearTimeout(timeoutId);
+    options.signal?.removeEventListener("abort", abort);
+  }
+}
+
+function isApiError(error: unknown): error is ApiError {
+  return error instanceof Error && "type" in error;
+}
+
+function shouldRefresh(error: ApiError, options: RequestOptions) {
+  return (
+    error.type === "ErreurAuth" &&
+    error.status === 401 &&
+    error.code === "jeton_expire" &&
+    !options.skipAuthRefresh &&
+    Boolean(authTokens?.refreshToken)
+  );
+}
+
+async function refreshAccessToken() {
+  const refreshToken = authTokens?.refreshToken;
+
+  if (!refreshToken) {
+    throw mapNetworkError(new Error("refreshToken absent"));
   }
 
-  return (await response.json()) as TResponse;
+  refreshRequest ??= send("/auth/refresh", authRefreshResponseSchema, {
+    body: { refreshToken },
+    method: "POST",
+    skipAuthRefresh: true
+  }).then((response) => {
+    authTokens = { accessToken: response.accessToken, refreshToken };
+    return response.accessToken;
+  });
+
+  try {
+    return await refreshRequest;
+  } finally {
+    refreshRequest = null;
+  }
+}
+
+export async function apiRequest<TResponse>(
+  path: `/${string}`,
+  schema: z.ZodType<TResponse>,
+  options: RequestOptions = {}
+) {
+  try {
+    return await send(path, schema, options);
+  } catch (error) {
+    if (isApiError(error) && shouldRefresh(error, options)) {
+      await refreshAccessToken();
+      return send(path, schema, { ...options, skipAuthRefresh: true });
+    }
+
+    throw error;
+  }
 }

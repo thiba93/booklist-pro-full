@@ -1,9 +1,13 @@
 export const theme = {
   colors: {
     accent: "#0F766E",
+    accentSoft: "#DDEFEA",
     background: "#FAFAF8",
     border: "#D7D7CE",
+    danger: "#B42318",
     onAccent: "#FFFFFF",
+    skeleton: "#E7E5DF",
+    skeletonStrong: "#D9D7D0",
     textPrimary: "#18181B",
     textSecondary: "#52525B"
   },
@@ -17,6 +21,9 @@ export const theme = {
     md: 16,
     lg: 24,
     xl: 40
+  },
+  touch: {
+    min: 44
   },
   typography: {
     caption: 12,
