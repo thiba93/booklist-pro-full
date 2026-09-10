@@ -5,7 +5,6 @@ import {
   booksPageSchema,
   emptyResponseSchema,
   noteSchema,
-  svgResponseSchema,
   type BooksPage,
   type Note
 } from "./schemas";
@@ -32,7 +31,7 @@ export type BookPatchPayload = Partial<
 >;
 
 export type BookCoverPayload = {
-  svg: string;
+  base64: string;
 };
 
 function encodePathSegment(value: string) {
@@ -109,13 +108,6 @@ export function deleteBookNote(bookId: string, noteId: string): Promise<void> {
       responseKind: "empty"
     }
   );
-}
-
-export function getCoverSvg(id: string): Promise<string> {
-  return apiRequest(`/covers/${encodePathSegment(id)}.svg`, svgResponseSchema, {
-    headers: { Accept: "image/svg+xml" },
-    responseKind: "text"
-  });
 }
 
 export function uploadBookCover(id: string, payload: BookCoverPayload): Promise<Book> {

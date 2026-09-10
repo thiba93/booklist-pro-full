@@ -128,7 +128,6 @@ export const syncResponseSchema = z.object({
 });
 
 export const emptyResponseSchema = z.undefined();
-export const svgResponseSchema = z.string();
 
 export type BooksPage = z.infer<typeof booksPageSchema>;
 export type Note = z.infer<typeof noteSchema>;

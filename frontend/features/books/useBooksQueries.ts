@@ -4,12 +4,14 @@ import {
   createBook,
   createBookNote,
   deleteBook,
+  deleteBookCover,
   deleteBookNote,
   getBook,
   getBookNotes,
   getBooks,
   patchBook,
   updateBook,
+  uploadBookCover,
   type BookCreatePayload,
   type BookPatchPayload,
   type BookUpdatePayload,
@@ -171,6 +173,30 @@ export function useDeleteBookNote(id: string) {
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: bookKeys.notes(id) });
+    }
+  });
+}
+
+export function useUploadBookCover(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (base64: string) => uploadBookCover(id, { base64 }),
+    onSuccess: async (book) => {
+      queryClient.setQueryData(bookKeys.detail(book.id), book);
+      await queryClient.invalidateQueries({ queryKey: bookKeys.lists() });
+    }
+  });
+}
+
+export function useDeleteBookCover(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => deleteBookCover(id),
+    onSuccess: async (book) => {
+      queryClient.setQueryData(bookKeys.detail(book.id), book);
+      await queryClient.invalidateQueries({ queryKey: bookKeys.lists() });
     }
   });
 }
