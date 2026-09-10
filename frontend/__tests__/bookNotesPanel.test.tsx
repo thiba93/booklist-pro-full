@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BookNotesPanel } from "../features/books/BookNotesPanel";
 import { createBookNote, deleteBookNote, getBookNotes } from "../services/api/booksApi";
 import type { Note } from "../services/api/schemas";
+import { AppProviders } from "./testProviders";
 
 vi.mock("../services/api/booksApi", async () => {
   const actual = await vi.importActual<typeof import("../services/api/booksApi")>(
@@ -44,7 +45,11 @@ function createClient() {
 }
 
 function Wrapper(props: { children: ReactNode; queryClient: QueryClient }) {
-  return <QueryClientProvider client={props.queryClient}>{props.children}</QueryClientProvider>;
+  return (
+    <AppProviders>
+      <QueryClientProvider client={props.queryClient}>{props.children}</QueryClientProvider>
+    </AppProviders>
+  );
 }
 
 async function waitUntil(assertion: () => void) {
