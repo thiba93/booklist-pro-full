@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { EmptyState, LoadingSkeleton, RetryState } from "../../components/feedback/RequestStates";
+import { useTranslation } from "../../services/i18n/I18nProvider";
 import type { Note } from "../../services/api/schemas";
-import { styles } from "./BookDetailScreen.styles";
+import { useThemeMode } from "../../theme/ThemeProvider";
+import { createStyles } from "./BookDetailScreen.styles";
 import { useBookNotes, useCreateBookNote, useDeleteBookNote } from "./useBooksQueries";
 
 type BookNotesPanelProps = {
@@ -11,6 +13,9 @@ type BookNotesPanelProps = {
 };
 
 export function BookNotesPanel({ bookId }: BookNotesPanelProps) {
+  const { theme } = useThemeMode();
+  const { t } = useTranslation();
+  const styles = createStyles(theme);
   const notes = useBookNotes(bookId);
   const createNote = useCreateBookNote(bookId);
   const deleteNote = useDeleteBookNote(bookId);
@@ -24,25 +29,25 @@ export function BookNotesPanel({ bookId }: BookNotesPanelProps) {
       await createNote.mutateAsync(contenu);
       setContenu("");
     } catch {
-      setError("La note n'a pas pu etre ajoutee.");
+      setError(t("bookNotes.addError"));
     }
   }
 
   return (
     <View style={styles.panel}>
-      <Text style={styles.sectionTitle}>Notes de lecture</Text>
+      <Text style={styles.sectionTitle}>{t("bookNotes.title")}</Text>
       <TextInput
-        accessibilityLabel="Nouvelle note de lecture"
+        accessibilityLabel={t("bookNotes.inputLabel")}
         multiline
         onChangeText={setContenu}
-        placeholder="Ajouter une note"
+        placeholder={t("bookNotes.inputPlaceholder")}
         returnKeyType="default"
         style={styles.noteInput}
         value={contenu}
       />
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <Pressable
-        accessibilityLabel="Ajouter la note"
+        accessibilityLabel={t("bookNotes.add")}
         accessibilityRole="button"
         accessibilityState={{ disabled: contenu.trim().length === 0 || createNote.isPending }}
         disabled={contenu.trim().length === 0 || createNote.isPending}
@@ -52,31 +57,24 @@ export function BookNotesPanel({ bookId }: BookNotesPanelProps) {
           (contenu.trim().length === 0 || createNote.isPending) && styles.disabledButton
         ]}
       >
-        <Text style={styles.primaryText}>{createNote.isPending ? "Ajout" : "Ajouter la note"}</Text>
+        <Text style={styles.primaryText}>{createNote.isPending ? t("bookNotes.adding") : t("bookNotes.add")}</Text>
       </Pressable>
 
       {notes.isLoading ? <LoadingSkeleton /> : null}
       {notes.isError ? (
         <RetryState
-          message="Les notes de lecture n'ont pas pu etre chargees."
+          message={t("bookNotes.errorMessage")}
           onRetry={() => void notes.refetch()}
-          title="Notes indisponibles"
+          title={t("bookNotes.errorTitle")}
         />
       ) : null}
       {notes.isSuccess && notes.data.length === 0 ? (
-        <EmptyState
-          message="Aucune note n'est encore associee a cet ouvrage."
-          title="Aucune note"
-        />
+        <EmptyState message={t("bookNotes.emptyMessage")} title={t("bookNotes.emptyTitle")} />
       ) : null}
       {notes.isSuccess && notes.data.length > 0 ? (
         <View style={styles.notesList}>
           {notes.data.map((note) => (
-            <NoteRow
-              key={note.id}
-              note={note}
-              onDelete={() => deleteNote.mutate(note.id)}
-            />
+            <NoteRow key={note.id} note={note} onDelete={() => deleteNote.mutate(note.id)} />
           ))}
         </View>
       ) : null}
@@ -85,32 +83,36 @@ export function BookNotesPanel({ bookId }: BookNotesPanelProps) {
 }
 
 function NoteRow({ note, onDelete }: { note: Note; onDelete: () => void }) {
+  const { theme } = useThemeMode();
+  const { locale, t } = useTranslation();
+  const styles = createStyles(theme);
+
   return (
     <View style={styles.noteRow}>
       <View style={styles.noteContent}>
-        <Text style={styles.noteDate}>{formatNoteDate(note.createdAt)}</Text>
+        <Text style={styles.noteDate}>{formatNoteDate(note.createdAt, locale)}</Text>
         <Text style={styles.fieldValue}>{note.contenu}</Text>
       </View>
       <Pressable
-        accessibilityLabel="Supprimer la note"
+        accessibilityLabel={t("bookNotes.delete")}
         accessibilityRole="button"
         onPress={onDelete}
         style={styles.secondaryButton}
       >
-        <Text style={styles.secondaryText}>Supprimer</Text>
+        <Text style={styles.secondaryText}>{t("bookNotes.delete")}</Text>
       </Pressable>
     </View>
   );
 }
 
-function formatNoteDate(value: string) {
+function formatNoteDate(value: string, locale: "fr" | "en") {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  return new Intl.DateTimeFormat("fr-FR", {
+  return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "fr-FR", {
     dateStyle: "short",
     timeStyle: "short"
   }).format(date);

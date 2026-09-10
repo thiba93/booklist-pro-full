@@ -5,6 +5,9 @@ import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-nati
 
 import { LoadingSkeleton, RetryState } from "../../components/feedback/RequestStates";
 import { Screen } from "../../components/layout/Screen";
+import { useTranslation } from "../../services/i18n/I18nProvider";
+import type { TranslationKey } from "../../services/i18n/fr";
+import { useThemeMode } from "../../theme/ThemeProvider";
 import {
   bookFormSchema,
   bookToFormValues,
@@ -14,7 +17,8 @@ import {
   type BookFormField,
   type BookFormValues
 } from "./bookForm";
-import { styles } from "./BookFormScreen.styles";
+import { createStyles } from "./BookFormScreen.styles";
+import { StarRating } from "./StarRating";
 import { useBookDetail, useCreateBook, useUpdateBook } from "./useBooksQueries";
 
 type BookFormScreenProps = {
@@ -25,6 +29,9 @@ type BookFormScreenProps = {
 };
 
 export function BookFormScreen({ id = "", mode, onCancel, onSaved }: BookFormScreenProps) {
+  const { theme } = useThemeMode();
+  const { t } = useTranslation();
+  const styles = createStyles(theme);
   const isEdit = mode === "edit";
   const book = useBookDetail(id, isEdit);
   const createBook = useCreateBook();
@@ -65,7 +72,7 @@ export function BookFormScreen({ id = "", mode, onCancel, onSaved }: BookFormScr
       const entries = Object.entries(fieldErrors) as [BookFormField, string][];
 
       if (entries.length === 0) {
-        setSubmitError("L'ouvrage n'a pas pu etre enregistre.");
+        setSubmitError(t("bookForm.submitError"));
         return;
       }
 
@@ -87,9 +94,9 @@ export function BookFormScreen({ id = "", mode, onCancel, onSaved }: BookFormScr
     return (
       <Screen>
         <RetryState
-          message="Les donnees de l'ouvrage n'ont pas pu etre chargees."
+          message={t("bookForm.loadErrorMessage")}
           onRetry={() => void book.refetch()}
-          title="Edition indisponible"
+          title={t("bookForm.loadErrorTitle")}
         />
       </Screen>
     );
@@ -101,36 +108,22 @@ export function BookFormScreen({ id = "", mode, onCancel, onSaved }: BookFormScr
     <Screen>
       <ScrollView contentContainerStyle={styles.container}>
         <Pressable accessibilityRole="button" onPress={onCancel} style={styles.backButton}>
-          <Text style={styles.backText}>Retour</Text>
+          <Text style={styles.backText}>{t("bookForm.backToDetail")}</Text>
         </Pressable>
-        <Text style={styles.title}>{isEdit ? "Modifier" : "Ajouter"} un ouvrage</Text>
+        <Text style={styles.title}>{isEdit ? t("bookForm.titleEdit") : t("bookForm.titleCreate")}</Text>
 
         <BookTextField control={form.control} error={form.formState.errors.titre?.message} name="titre" />
-        <BookTextField
-          control={form.control}
-          error={form.formState.errors.auteur?.message}
-          name="auteur"
-        />
-        <BookTextField
-          control={form.control}
-          error={form.formState.errors.editeur?.message}
-          name="editeur"
-        />
+        <BookTextField control={form.control} error={form.formState.errors.auteur?.message} name="auteur" />
+        <BookTextField control={form.control} error={form.formState.errors.editeur?.message} name="editeur" />
         <BookTextField
           control={form.control}
           error={form.formState.errors.annee?.message}
           keyboardType="numeric"
           name="annee"
         />
-        <BookTextField
-          control={form.control}
-          error={form.formState.errors.note?.message}
-          keyboardType="numeric"
-          name="note"
-        />
-
-        <BooleanField control={form.control} label="Lu" name="lu" />
-        <BooleanField control={form.control} label="Favori" name="favori" />
+        <NoteField control={form.control} />
+        <BooleanField control={form.control} labelKey="bookForm.fieldLu" name="lu" />
+        <BooleanField control={form.control} labelKey="bookForm.fieldFavori" name="favori" />
 
         {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
 
@@ -141,10 +134,10 @@ export function BookFormScreen({ id = "", mode, onCancel, onSaved }: BookFormScr
             onPress={form.handleSubmit(submit)}
             style={styles.primaryButton}
           >
-            <Text style={styles.primaryText}>{isSaving ? "Enregistrement" : "Enregistrer"}</Text>
+            <Text style={styles.primaryText}>{isSaving ? t("common.saving") : t("common.save")}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={onCancel} style={styles.secondaryButton}>
-            <Text style={styles.secondaryText}>Annuler</Text>
+            <Text style={styles.secondaryText}>{t("common.cancel")}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -156,13 +149,24 @@ type FieldProps = {
   control: ReturnType<typeof useForm<BookFormValues>>["control"];
   error?: string | undefined;
   keyboardType?: "default" | "numeric";
-  name: Exclude<BookFormField, "lu" | "favori">;
+  name: Exclude<BookFormField, "lu" | "favori" | "note">;
+};
+
+const fieldLabelKeys: Record<FieldProps["name"], TranslationKey> = {
+  titre: "bookForm.fieldTitre",
+  auteur: "bookForm.fieldAuteur",
+  editeur: "bookForm.fieldEditeur",
+  annee: "bookForm.fieldAnnee"
 };
 
 function BookTextField({ control, error, keyboardType = "default", name }: FieldProps) {
+  const { theme } = useThemeMode();
+  const { t } = useTranslation();
+  const styles = createStyles(theme);
+
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{fieldLabel(name)}</Text>
+      <Text style={styles.label}>{t(fieldLabelKeys[name])}</Text>
       <Controller
         control={control}
         name={name}
@@ -181,39 +185,55 @@ function BookTextField({ control, error, keyboardType = "default", name }: Field
   );
 }
 
+function NoteField({ control }: { control: ReturnType<typeof useForm<BookFormValues>>["control"] }) {
+  const { theme } = useThemeMode();
+  const { t } = useTranslation();
+  const styles = createStyles(theme);
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{t("bookForm.fieldNote")}</Text>
+      <Controller
+        control={control}
+        name="note"
+        render={({ field }) => {
+          const current = field.value.trim().length > 0 ? Number(field.value) : 0;
+
+          return (
+            <StarRating
+              onChange={(next) => field.onChange(next === current ? "" : String(next))}
+              value={current > 0 ? current : null}
+            />
+          );
+        }}
+      />
+    </View>
+  );
+}
+
 function BooleanField({
   control,
-  label,
+  labelKey,
   name
 }: {
   control: ReturnType<typeof useForm<BookFormValues>>["control"];
-  label: string;
+  labelKey: TranslationKey;
   name: Extract<BookFormField, "lu" | "favori">;
 }) {
+  const { theme } = useThemeMode();
+  const { t } = useTranslation();
+  const styles = createStyles(theme);
+
   return (
     <Controller
       control={control}
       name={name}
       render={({ field }) => (
         <View style={styles.row}>
-          <Text style={styles.label}>{label}</Text>
+          <Text style={styles.label}>{t(labelKey)}</Text>
           <Switch onValueChange={field.onChange} value={Boolean(field.value)} />
         </View>
       )}
     />
   );
-}
-
-function fieldLabel(name: BookFormField) {
-  const labels: Record<BookFormField, string> = {
-    titre: "Titre",
-    auteur: "Auteur",
-    editeur: "Editeur",
-    annee: "Annee",
-    note: "Note",
-    lu: "Lu",
-    favori: "Favori"
-  };
-
-  return labels[name];
 }

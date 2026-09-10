@@ -3,8 +3,13 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { EmptyState, LoadingSkeleton, RetryState } from "../../components/feedback/RequestStates";
 import { Screen } from "../../components/layout/Screen";
+import { useTranslation } from "../../services/i18n/I18nProvider";
+import { useThemeMode } from "../../theme/ThemeProvider";
+import { BookCoverPanel } from "./BookCoverPanel";
+import { BookEnrichmentPanel } from "./BookEnrichmentPanel";
 import { BookNotesPanel } from "./BookNotesPanel";
-import { styles } from "./BookDetailScreen.styles";
+import { createStyles } from "./BookDetailScreen.styles";
+import { StarRating } from "./StarRating";
 import { useBookDetail, useDeleteBook, usePatchBook } from "./useBooksQueries";
 
 type BookDetailScreenProps = {
@@ -15,6 +20,9 @@ type BookDetailScreenProps = {
 };
 
 export function BookDetailScreen({ id, onBack, onDeleted, onEdit }: BookDetailScreenProps) {
+  const { theme } = useThemeMode();
+  const { t } = useTranslation();
+  const styles = createStyles(theme);
   const book = useBookDetail(id);
   const patchBook = usePatchBook();
   const deleteBook = useDeleteBook();
@@ -56,44 +64,48 @@ export function BookDetailScreen({ id, onBack, onDeleted, onEdit }: BookDetailSc
     <Screen>
       <ScrollView contentContainerStyle={styles.container}>
         <Pressable accessibilityRole="button" onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backText}>Retour</Text>
+          <Text style={styles.backText}>{t("common.back")}</Text>
         </Pressable>
 
         {book.isLoading ? <LoadingSkeleton /> : null}
 
         {book.isError ? (
           <RetryState
-            message="La fiche de cet ouvrage n'a pas pu etre chargee."
+            message={t("bookDetail.errorMessage")}
             onRetry={() => void book.refetch()}
-            title="Fiche indisponible"
+            title={t("bookDetail.errorTitle")}
           />
         ) : null}
 
         {book.isSuccess && !book.data ? (
-          <EmptyState
-            message="Cet ouvrage n'existe plus dans la bibliotheque."
-            title="Ouvrage introuvable"
-          />
+          <EmptyState message={t("bookDetail.notFoundMessage")} title={t("bookDetail.notFoundTitle")} />
         ) : null}
 
         {book.isSuccess && book.data ? (
           <>
             <View>
-              <Text style={styles.status}>{book.data.lu ? "Lu" : "Non lu"}</Text>
+              <Text style={styles.status}>
+                {book.data.lu ? t("bookRow.statusRead") : t("bookRow.statusUnread")}
+              </Text>
               <Text style={styles.title}>{book.data.titre}</Text>
               <Text style={styles.textMuted}>{book.data.auteur}</Text>
             </View>
 
+            <BookCoverPanel book={book.data} />
+
             <View style={styles.panel}>
-              <Info label="Editeur" value={book.data.editeur || "Non renseigne"} />
-              <Info label="Annee" value={String(book.data.annee)} />
-              <Info label="Note" value={book.data.note === null ? "Non notee" : `${book.data.note}/5`} />
-              <Info label="Version" value={String(book.data.version)} />
+              <Info label={t("bookDetail.publisher")} value={book.data.editeur || t("bookDetail.publisherEmpty")} />
+              <Info label={t("bookDetail.year")} value={String(book.data.annee)} />
+              <View style={styles.grid}>
+                <Text style={styles.fieldLabel}>{t("bookDetail.note")}</Text>
+                <StarRating readOnly value={book.data.note} />
+              </View>
+              <Info label={t("bookDetail.version")} value={String(book.data.version)} />
             </View>
 
             <View style={styles.actions}>
               <Pressable accessibilityRole="button" onPress={onEdit} style={styles.primaryButton}>
-                <Text style={styles.primaryText}>Modifier</Text>
+                <Text style={styles.primaryText}>{t("bookDetail.edit")}</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -103,12 +115,12 @@ export function BookDetailScreen({ id, onBack, onDeleted, onEdit }: BookDetailSc
                 style={styles.secondaryButton}
               >
                 <Text style={styles.secondaryText}>
-                  {book.data.lu ? "Marquer non lu" : "Marquer lu"}
+                  {book.data.lu ? t("bookRow.markUnread") : t("bookRow.markRead")}
                 </Text>
               </Pressable>
               <Pressable
                 accessibilityLabel={
-                  book.data.favori ? "Retirer des coups de coeur" : "Ajouter aux coups de coeur"
+                  book.data.favori ? t("bookDetail.removeFavorite") : t("bookDetail.addFavorite")
                 }
                 accessibilityRole="button"
                 accessibilityState={{ busy: patchBook.isPending, checked: book.data.favori }}
@@ -125,29 +137,31 @@ export function BookDetailScreen({ id, onBack, onDeleted, onEdit }: BookDetailSc
                 onPress={() => setDeleteStep("confirm")}
                 style={styles.dangerButton}
               >
-                <Text style={styles.dangerText}>Supprimer</Text>
+                <Text style={styles.dangerText}>{t("bookDetail.delete")}</Text>
               </Pressable>
             </View>
 
             <BookNotesPanel bookId={id} />
 
+            <BookEnrichmentPanel auteur={book.data.auteur} titre={book.data.titre} />
+
             {deleteStep === "confirm" ? (
               <View style={styles.panel}>
-                <Text style={styles.textMuted}>Confirmer la suppression de cet ouvrage.</Text>
+                <Text style={styles.textMuted}>{t("bookDetail.confirmDeleteMessage")}</Text>
                 <View style={styles.actions}>
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => setDeleteStep("scheduled")}
                     style={styles.dangerButton}
                   >
-                    <Text style={styles.dangerText}>Confirmer</Text>
+                    <Text style={styles.dangerText}>{t("common.confirm")}</Text>
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => setDeleteStep("idle")}
                     style={styles.secondaryButton}
                   >
-                    <Text style={styles.secondaryText}>Annuler</Text>
+                    <Text style={styles.secondaryText}>{t("common.cancel")}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -156,14 +170,14 @@ export function BookDetailScreen({ id, onBack, onDeleted, onEdit }: BookDetailSc
             {deleteStep === "scheduled" ? (
               <View style={styles.panel}>
                 <Text style={styles.textMuted}>
-                  Suppression dans {remainingSeconds} secondes.
+                  {t("bookDetail.deleteScheduled", { seconds: remainingSeconds })}
                 </Text>
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setDeleteStep("idle")}
                   style={styles.secondaryButton}
                 >
-                  <Text style={styles.secondaryText}>Annuler la suppression</Text>
+                  <Text style={styles.secondaryText}>{t("bookDetail.cancelDelete")}</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -175,6 +189,9 @@ export function BookDetailScreen({ id, onBack, onDeleted, onEdit }: BookDetailSc
 }
 
 function Info({ label, value }: { label: string; value: string }) {
+  const { theme } = useThemeMode();
+  const styles = createStyles(theme);
+
   return (
     <View style={styles.grid}>
       <Text style={styles.fieldLabel}>{label}</Text>

@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { EmptyState, LoadingSkeleton, RetryState } from "../../components/feedback/RequestStates";
 import { Screen } from "../../components/layout/Screen";
 import type { Book } from "../../domain/books/book";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { useTranslation } from "../../services/i18n/I18nProvider";
 import type { BooksQuery } from "../../services/api/booksApi";
+import { useThemeMode } from "../../theme/ThemeProvider";
 import {
   BookRows,
   FilterSegments,
@@ -14,8 +16,9 @@ import {
   type SortField,
   type StatusFilter
 } from "./BookListParts";
-import { styles } from "./BookListScreen.styles";
+import { createStyles } from "./BookListScreen.styles";
 import { booksPageSize } from "./bookQueryKeys";
+import { SettingsBar } from "./SettingsBar";
 import { useBooksList, usePatchBook } from "./useBooksQueries";
 
 type BookListScreenProps = {
@@ -24,6 +27,9 @@ type BookListScreenProps = {
 };
 
 export function BookListScreen({ onCreate, onOpenBook }: BookListScreenProps) {
+  const { theme } = useThemeMode();
+  const { t } = useTranslation();
+  const styles = createStyles(theme);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<StatusFilter>("tous");
@@ -34,18 +40,13 @@ export function BookListScreen({ onCreate, onOpenBook }: BookListScreenProps) {
   const patchBook = usePatchBook();
 
   const query = useMemo<BooksQuery>(() => {
-    const baseQuery: BooksQuery = {
-      page,
-      limit: booksPageSize,
-      q: debouncedQ,
-      sort,
-      order
-    };
+    const baseQuery: BooksQuery = { page, limit: booksPageSize, q: debouncedQ, sort, order };
     const statusQuery = status === "tous" ? baseQuery : { ...baseQuery, status };
     return favoriteOnly ? { ...statusQuery, favori: true } : statusQuery;
   }, [debouncedQ, favoriteOnly, order, page, sort, status]);
   const books = useBooksList(query);
   const totalPages = books.data?.totalPages ?? 1;
+  const pendingId = patchBook.isPending ? patchBook.variables?.id : undefined;
 
   function changeSearch(value: string) {
     setQ(value);
@@ -67,87 +68,92 @@ export function BookListScreen({ onCreate, onOpenBook }: BookListScreenProps) {
     setPage(1);
   }
 
-  function toggleRead(book: Book) {
-    patchBook.mutate({ id: book.id, payload: { lu: !book.lu } });
-  }
+  const toggleRead = useCallback(
+    (book: Book) => patchBook.mutate({ id: book.id, payload: { lu: !book.lu } }),
+    [patchBook]
+  );
 
-  function toggleFavorite(book: Book) {
-    patchBook.mutate({ id: book.id, payload: { favori: !book.favori } });
-  }
+  const toggleFavorite = useCallback(
+    (book: Book) => patchBook.mutate({ id: book.id, payload: { favori: !book.favori } }),
+    [patchBook]
+  );
 
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.kicker}>BookList Pro</Text>
-            <Text style={styles.title}>Ouvrages</Text>
+            <Text style={styles.kicker}>{t("bookList.kicker")}</Text>
+            <Text style={styles.title}>{t("bookList.title")}</Text>
           </View>
-          <Pressable accessibilityRole="button" onPress={onCreate} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Ajouter</Text>
-          </Pressable>
+          <SettingsBar />
         </View>
 
         <View style={styles.filters}>
           <TextInput
-            accessibilityLabel="Rechercher par titre ou auteur"
+            accessibilityLabel={t("bookList.searchLabel")}
             inputMode="search"
             onChangeText={changeSearch}
-            placeholder="Titre ou auteur"
+            placeholder={t("bookList.searchPlaceholder")}
             returnKeyType="search"
             style={styles.input}
             value={q}
           />
           <FilterSegments status={status} onChange={changeStatus} />
           <Pressable
-            accessibilityLabel="Filtrer les coups de coeur"
+            accessibilityLabel={t("bookList.favoriteFilterLabel")}
             accessibilityRole="button"
             accessibilityState={{ checked: favoriteOnly }}
             onPress={changeFavoriteOnly}
             style={[styles.secondaryButton, favoriteOnly && styles.favoriteFilterActive]}
           >
             <Text style={styles.secondaryButtonText}>
-              {favoriteOnly ? "Coeurs seulement" : "Inclure tous"}
+              {favoriteOnly ? t("bookList.favoriteFilterOn") : t("bookList.favoriteFilterOff")}
             </Text>
           </Pressable>
           <SortSegments sort={sort} onChange={changeSort} />
           <Pressable
-            accessibilityLabel="Inverser l'ordre de tri"
+            accessibilityLabel={t("bookList.orderToggle")}
             accessibilityRole="button"
             onPress={() => setOrder((current) => (current === "asc" ? "desc" : "asc"))}
             style={styles.secondaryButton}
           >
-            <Text style={styles.secondaryButtonText}>Tri {order === "asc" ? "A-Z" : "Z-A"}</Text>
+            <Text style={styles.secondaryButtonText}>
+              {order === "asc" ? t("bookList.orderAsc") : t("bookList.orderDesc")}
+            </Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={onCreate} style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>{t("bookList.add")}</Text>
           </Pressable>
         </View>
 
         {books.isLoading ? <LoadingSkeleton /> : null}
         {books.isFetching && !books.isLoading ? (
           <Text accessibilityLiveRegion="polite" style={styles.loadingNext}>
-            Chargement de la page...
+            {t("bookList.loadingNext")}
           </Text>
         ) : null}
         {books.isError ? (
           <RetryState
-            message="La liste des ouvrages n'a pas pu etre chargee."
+            message={t("bookList.errorMessage")}
             onRetry={() => void books.refetch()}
-            title="Chargement impossible"
+            title={t("bookList.errorTitle")}
           />
         ) : null}
         {books.isSuccess && books.data.items.length === 0 ? (
           <EmptyState
             message={
               q.trim().length > 0 || status !== "tous" || favoriteOnly
-                ? "Aucun ouvrage ne correspond aux filtres actifs."
-                : "Ajoutez un premier ouvrage pour constituer la bibliotheque."
+                ? t("bookList.emptyFiltered")
+                : t("bookList.emptyGeneral")
             }
-            title="Aucun ouvrage"
+            title={t("bookList.emptyTitle")}
           />
         ) : null}
         {books.isSuccess && books.data.items.length > 0 ? (
           <BookRows
             books={books.data.items}
-            isMutating={patchBook.isPending}
+            pendingId={pendingId}
             onOpenBook={onOpenBook}
             onToggleFavorite={toggleFavorite}
             onToggleRead={toggleRead}
