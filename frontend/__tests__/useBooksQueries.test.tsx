@@ -131,4 +131,96 @@ describe("useBooksQueries", () => {
     await waitUntil(() => expect(mutation?.isError).toBe(true));
     expect(queryClient.getQueryData<Book>(bookKeys.detail(book.id))?.lu).toBe(false);
   });
+
+  it("rolls back optimistic favorite status when the server rejects", async () => {
+    const patchBookMock = vi.mocked(patchBook);
+    let rejectPatch: (error: Error) => void = () => undefined;
+    patchBookMock.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectPatch = reject;
+        })
+    );
+    const queryClient = createClient();
+    const page: BooksPage = { items: [book], page: 1, limit: 20, total: 1, totalPages: 1 };
+    let mutation: ReturnType<typeof usePatchBook> | null = null;
+
+    queryClient.setQueryData(bookKeys.detail(book.id), book);
+    queryClient.setQueryData(bookKeys.list({ page: 1, limit: 20 }), page);
+
+    function TestComponent() {
+      mutation = usePatchBook();
+      return null;
+    }
+
+    await act(async () => {
+      create(
+        <Wrapper queryClient={queryClient}>
+          <TestComponent />
+        </Wrapper>
+      );
+    });
+
+    act(() => {
+      mutation?.mutate({ id: book.id, payload: { favori: true } });
+    });
+
+    await waitUntil(() => {
+      expect(queryClient.getQueryData<Book>(bookKeys.detail(book.id))?.favori).toBe(true);
+      const listData = queryClient.getQueryData<BooksPage>(bookKeys.list({ page: 1, limit: 20 }));
+      expect(listData?.items[0]?.favori).toBe(true);
+    });
+
+    await act(async () => {
+      rejectPatch(new Error("refused"));
+    });
+
+    await waitUntil(() => expect(mutation?.isError).toBe(true));
+    expect(queryClient.getQueryData<Book>(bookKeys.detail(book.id))?.favori).toBe(false);
+    const listData = queryClient.getQueryData<BooksPage>(bookKeys.list({ page: 1, limit: 20 }));
+    expect(listData?.items[0]?.favori).toBe(false);
+  });
+
+  it("cancels the previous search request when the query changes", async () => {
+    const getBooksMock = vi.mocked(getBooks);
+    const signals: AbortSignal[] = [];
+    getBooksMock.mockImplementation(async (_query, signal) => {
+      if (signal) {
+        signals.push(signal);
+      }
+      await new Promise(() => {
+        // Never resolves: only cancellation via AbortSignal should settle it.
+      });
+      return { items: [], page: 1, limit: 20, total: 0, totalPages: 1 };
+    });
+    const queryClient = createClient();
+
+    function TestComponent({ q }: { q: string }) {
+      useBooksList({ page: 1, limit: 20, q });
+      return null;
+    }
+
+    let renderer: ReturnType<typeof create> | undefined;
+    await act(async () => {
+      renderer = create(
+        <Wrapper queryClient={queryClient}>
+          <TestComponent q="dune" />
+        </Wrapper>
+      );
+    });
+
+    await waitUntil(() => expect(signals.length).toBe(1));
+    expect(signals[0]?.aborted).toBe(false);
+
+    await act(async () => {
+      renderer?.update(
+        <Wrapper queryClient={queryClient}>
+          <TestComponent q="herbert" />
+        </Wrapper>
+      );
+    });
+
+    await waitUntil(() => expect(signals.length).toBe(2));
+    expect(signals[0]?.aborted).toBe(true);
+  });
 });
