@@ -1,8 +1,9 @@
 import { StyleSheet } from "react-native";
 
-import { theme } from "../../theme/theme";
+import type { Theme } from "../../theme/theme";
 
-export const styles = StyleSheet.create({
+export function createStyles(theme: Theme) {
+  return StyleSheet.create({
   actions: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -160,5 +161,21 @@ export const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: theme.typography.display,
     fontWeight: "800"
+  },
+  cover: {
+    backgroundColor: theme.colors.skeleton,
+    borderRadius: theme.radius.md,
+    height: 220,
+    width: 160
+  },
+  coverRow: {
+    flexDirection: "row",
+    gap: theme.spacing.md
+  },
+  coverActions: {
+    flex: 1,
+    gap: theme.spacing.sm,
+    justifyContent: "center"
   }
-});
+  });
+}

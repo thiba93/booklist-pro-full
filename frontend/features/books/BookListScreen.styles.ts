@@ -1,8 +1,9 @@
 import { StyleSheet } from "react-native";
 
-import { theme } from "../../theme/theme";
+import type { Theme } from "../../theme/theme";
 
-export const styles = StyleSheet.create({
+export function createStyles(theme: Theme) {
+  return StyleSheet.create({
   container: {
     gap: theme.spacing.lg,
     paddingBottom: theme.spacing.xl
@@ -180,5 +181,12 @@ export const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     fontSize: theme.typography.display,
     fontWeight: "800"
+  },
+  coverThumb: {
+    backgroundColor: theme.colors.skeleton,
+    borderRadius: theme.radius.sm,
+    height: theme.touch.min,
+    width: theme.touch.min
   }
-});
+  });
+}

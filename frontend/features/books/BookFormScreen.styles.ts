@@ -1,8 +1,9 @@
 import { StyleSheet } from "react-native";
 
-import { theme } from "../../theme/theme";
+import type { Theme } from "../../theme/theme";
 
-export const styles = StyleSheet.create({
+export function createStyles(theme: Theme) {
+  return StyleSheet.create({
   actions: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -79,4 +80,5 @@ export const styles = StyleSheet.create({
     fontSize: theme.typography.display,
     fontWeight: "800"
   }
-});
+  });
+}
