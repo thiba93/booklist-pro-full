@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { useAuth } from "../auth/AuthProvider";
 import { BookDetailScreen } from "./BookDetailScreen";
 import { BookFormScreen } from "./BookFormScreen";
 import { BookListScreen } from "./BookListScreen";
@@ -11,7 +12,19 @@ type BookRoute =
   | { name: "edit"; id: string };
 
 export function BookScreen() {
+  const { canWrite } = useAuth();
   const [route, setRoute] = useState<BookRoute>({ name: "list" });
+
+  // Defense en profondeur : un role lecteur ne doit jamais atteindre les
+  // ecrans d'ecriture, meme si les boutons qui y menent restent masques.
+  if (!canWrite && (route.name === "create" || route.name === "edit")) {
+    return (
+      <BookListScreen
+        onCreate={() => undefined}
+        onOpenBook={(id) => setRoute({ name: "detail", id })}
+      />
+    );
+  }
 
   if (route.name === "detail") {
     return (

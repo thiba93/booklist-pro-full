@@ -29,13 +29,38 @@ type AuthTokens = {
 let authTokens: AuthTokens | null = null;
 let refreshRequest: Promise<string> | null = null;
 
+/**
+ * Notifie de tout changement de jetons (connexion, refresh silencieux,
+ * deconnexion) pour permettre a la couche session (AuthProvider) de
+ * persister le refreshToken sans que httpClient ne connaisse le storage.
+ */
+export type TokensListener = (tokens: Readonly<AuthTokens> | null) => void;
+let tokensListener: TokensListener | null = null;
+
+export function onApiAuthTokensChange(listener: TokensListener | null) {
+  tokensListener = listener;
+}
+
+/**
+ * Notifie les 403 (droits insuffisants) pour permettre un affichage global
+ * clair, independant de l'ecran qui a declenche l'appel.
+ */
+export type ForbiddenListener = (error: ApiError) => void;
+let forbiddenListener: ForbiddenListener | null = null;
+
+export function onApiForbidden(listener: ForbiddenListener | null) {
+  forbiddenListener = listener;
+}
+
 export function setApiAuthTokens(tokens: AuthTokens) {
   authTokens = tokens;
+  tokensListener?.(authTokens);
 }
 
 export function clearApiAuthTokens() {
   authTokens = null;
   refreshRequest = null;
+  tokensListener?.(null);
 }
 
 function buildUrl(path: `/${string}`) {
@@ -183,6 +208,10 @@ export async function apiRequest<TResponse>(
     if (isApiError(error) && shouldRefresh(error, options)) {
       await refreshAccessToken();
       return send(path, schema, { ...options, skipAuthRefresh: true });
+    }
+
+    if (isApiError(error) && error.type === "ErreurAuth" && error.status === 403) {
+      forbiddenListener?.(error);
     }
 
     throw error;

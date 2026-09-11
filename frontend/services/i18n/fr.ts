@@ -19,6 +19,16 @@ export const fr = {
 
   "appError.title": "Une erreur est survenue.",
 
+  "auth.title": "Connexion",
+  "auth.emailLabel": "Email",
+  "auth.emailPlaceholder": "vous@exemple.fr",
+  "auth.passwordLabel": "Mot de passe",
+  "auth.passwordPlaceholder": "Mot de passe",
+  "auth.submit": "Se connecter",
+  "auth.loading": "Verification de la session...",
+  "auth.logout": "Se deconnecter",
+  "auth.forbiddenDismiss": "Fermer",
+
   "bookList.kicker": "BookList Pro",
   "bookList.title": "Ouvrages",
   "bookList.add": "Ajouter",

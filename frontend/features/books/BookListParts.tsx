@@ -75,6 +75,7 @@ export function SortSegments(props: { sort: SortField; onChange: (sort: SortFiel
 
 type BookRowProps = {
   book: Book;
+  canWrite?: boolean | undefined;
   isMutating: boolean;
   onOpenBook: (id: string) => void;
   onToggleFavorite: (book: Book) => void;
@@ -88,6 +89,7 @@ type BookRowProps = {
  */
 export const BookRow = memo(function BookRow({
   book,
+  canWrite = true,
   isMutating,
   onOpenBook,
   onToggleFavorite,
@@ -113,34 +115,45 @@ export const BookRow = memo(function BookRow({
         <Text style={styles.rowTitle}>{book.titre}</Text>
         <Text style={styles.rowMeta}>{book.auteur} - {book.annee}</Text>
       </Pressable>
-      <Pressable
-        accessibilityLabel={book.lu ? t("bookRow.markUnread") : t("bookRow.markRead")}
-        accessibilityRole="button"
-        accessibilityState={{ checked: book.lu, busy: isMutating }}
-        onPress={() => onToggleRead(book)}
-        style={[styles.statusButton, book.lu && styles.statusButtonDone]}
-      >
+      {canWrite ? (
+        <Pressable
+          accessibilityLabel={book.lu ? t("bookRow.markUnread") : t("bookRow.markRead")}
+          accessibilityRole="button"
+          accessibilityState={{ checked: book.lu, busy: isMutating }}
+          onPress={() => onToggleRead(book)}
+          style={[styles.statusButton, book.lu && styles.statusButtonDone]}
+        >
+          <Text style={[styles.statusText, book.lu && styles.statusTextDone]}>
+            {book.lu ? t("bookRow.statusRead") : t("bookRow.statusUnread")}
+          </Text>
+        </Pressable>
+      ) : (
         <Text style={[styles.statusText, book.lu && styles.statusTextDone]}>
           {book.lu ? t("bookRow.statusRead") : t("bookRow.statusUnread")}
         </Text>
-      </Pressable>
-      <Pressable
-        accessibilityLabel={book.favori ? t("bookRow.removeFavorite") : t("bookRow.addFavorite")}
-        accessibilityRole="button"
-        accessibilityState={{ checked: book.favori, busy: isMutating }}
-        onPress={() => onToggleFavorite(book)}
-        style={[styles.heartButton, book.favori && styles.heartButtonActive]}
-      >
-        <Text style={[styles.heartText, book.favori && styles.heartTextActive]}>
-          {book.favori ? "♥" : "♡"}
-        </Text>
-      </Pressable>
+      )}
+      {canWrite ? (
+        <Pressable
+          accessibilityLabel={book.favori ? t("bookRow.removeFavorite") : t("bookRow.addFavorite")}
+          accessibilityRole="button"
+          accessibilityState={{ checked: book.favori, busy: isMutating }}
+          onPress={() => onToggleFavorite(book)}
+          style={[styles.heartButton, book.favori && styles.heartButtonActive]}
+        >
+          <Text style={[styles.heartText, book.favori && styles.heartTextActive]}>
+            {book.favori ? "♥" : "♡"}
+          </Text>
+        </Pressable>
+      ) : book.favori ? (
+        <Text style={styles.heartText}>♥</Text>
+      ) : null}
     </View>
   );
 });
 
 export function BookRows(props: {
   books: Book[];
+  canWrite?: boolean | undefined;
   pendingId?: string | undefined;
   onOpenBook: (id: string) => void;
   onToggleFavorite: (book: Book) => void;
@@ -154,6 +167,7 @@ export function BookRows(props: {
       {props.books.map((book) => (
         <BookRow
           book={book}
+          canWrite={props.canWrite}
           isMutating={book.id === props.pendingId}
           key={book.id}
           onOpenBook={props.onOpenBook}
