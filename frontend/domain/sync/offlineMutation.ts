@@ -16,7 +16,7 @@ type ChampsCommuns = {
   creeLe: string;
   statut: StatutMutation;
   serveur?: unknown;
-  versionAttendue?: number;
+  versionAttendue?: number | undefined;
 };
 
 export type MutationOuvrage = ChampsCommuns & {

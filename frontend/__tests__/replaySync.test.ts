@@ -40,7 +40,21 @@ describe("rejouerFileMutations", () => {
     vi.mocked(deleteBookNote).mockReset();
   });
 
-  it("sends every pending book mutation in a single /sync batch and clears the ones the server accepted", async () => {
+  const livreServeur = {
+    id: "book-2",
+    titre: "Dune Messiah",
+    auteur: "Frank Herbert",
+    editeur: "",
+    annee: 1969,
+    lu: false,
+    favori: false,
+    note: null,
+    couverture: null,
+    createdAt: "2020-01-01T00:00:00.000Z",
+    version: 4
+  };
+
+  it("sends every pending book mutation in a single /sync batch, clears accepted ones, and abandons a conflicted one the server updated more recently", async () => {
     enfilerCreationOuvrage("m1", { titre: "Dune", auteur: "Frank Herbert", annee: 1965 });
     enfilerModificationOuvrage("m2", "book-2", { titre: "Dune Messiah", auteur: "Frank Herbert", annee: 1969 }, 3);
 
@@ -50,20 +64,8 @@ describe("rejouerFileMutations", () => {
         {
           id: "m2",
           statut: "conflit",
-          serveur: {
-            id: "book-2",
-            titre: "Dune Messiah",
-            auteur: "Frank Herbert",
-            editeur: "",
-            annee: 1969,
-            lu: false,
-            favori: false,
-            note: null,
-            couverture: null,
-            createdAt: "x",
-            updatedAt: "y",
-            version: 4
-          },
+          // Plus recent que "maintenant" (creeLe de m2) : le serveur gagne.
+          serveur: { ...livreServeur, updatedAt: "2999-01-01T00:00:00.000Z" },
           versionAttendue: 4
         }
       ],
@@ -77,6 +79,52 @@ describe("rejouerFileMutations", () => {
     const file = obtenirFileMutations();
     expect(file.find((m) => m.id === "m1")).toBeUndefined();
     expect(file.find((m) => m.id === "m2")).toMatchObject({ statut: "conflit", versionAttendue: 4 });
+  });
+
+  it("rebases and immediately retries a conflicted mutation more recent than the server's known update", async () => {
+    enfilerModificationOuvrage("m1", "book-2", { titre: "Dune Messiah 2", auteur: "Frank Herbert", annee: 1969 }, 3);
+
+    vi.mocked(syncBooks)
+      .mockResolvedValueOnce({
+        resultats: [
+          {
+            id: "m1",
+            statut: "conflit",
+            // Anterieur a "maintenant" (creeLe de m1) : l'intention locale gagne.
+            serveur: { ...livreServeur, updatedAt: "2020-06-01T00:00:00.000Z" },
+            versionAttendue: 4
+          }
+        ],
+        resume: { total: 1, ok: 0, conflits: 1, erreurs: 0 },
+        serveurLe: "2026-01-01T00:00:00.000Z"
+      })
+      .mockResolvedValueOnce({
+        resultats: [{ id: "m1", statut: "ok", livre: null }],
+        resume: { total: 1, ok: 1, conflits: 0, erreurs: 0 },
+        serveurLe: "2026-01-01T00:00:01.000Z"
+      });
+
+    await rejouerFileMutations();
+
+    expect(syncBooks).toHaveBeenCalledTimes(2);
+    // Le deuxieme appel envoie la mutation rebasee sur la version serveur.
+    expect(vi.mocked(syncBooks).mock.calls[1]?.[0]).toMatchObject([{ id: "m1", baseVersion: 4 }]);
+    expect(obtenirFileMutations().find((m) => m.id === "m1")).toBeUndefined();
+  });
+
+  it("abandons a replayed conflict missing serveur/versionAttendue instead of rebasing blindly (regression)", async () => {
+    enfilerModificationOuvrage("m1", "book-2", { titre: "Dune Messiah 2", auteur: "Frank Herbert", annee: 1969 }, 3);
+
+    vi.mocked(syncBooks).mockResolvedValue({
+      resultats: [{ id: "m1", statut: "conflit", rejeu: true, livre: null }],
+      resume: { total: 1, ok: 0, conflits: 1, erreurs: 0 },
+      serveurLe: "2026-01-01T00:00:00.000Z"
+    });
+
+    await rejouerFileMutations();
+
+    expect(syncBooks).toHaveBeenCalledTimes(1);
+    expect(obtenirFileMutations().find((m) => m.id === "m1")).toMatchObject({ statut: "conflit" });
   });
 
   it("leaves the queue untouched when the batch call fails (retried on next reconnect)", async () => {

@@ -198,9 +198,32 @@ export function retirerMutation(id: string): void {
 export function marquerStatutMutation(
   id: string,
   statut: StatutMutation,
-  extra?: { serveur?: unknown; versionAttendue?: number }
+  extra?: { serveur?: unknown; versionAttendue?: number | undefined }
 ): void {
   file = file.map((mutation) => (mutation.id === id ? { ...mutation, statut, ...extra } : mutation));
+  persister();
+  notifier();
+}
+
+/**
+ * Rebase une mutation "ouvrage" en conflit sur la version serveur actuelle
+ * et la remet en attente pour un rejeu immediat (voir
+ * deciderSortMutationConflit / docs/ADR/003-resolution-conflits.md). N'a
+ * d'effet que sur une modification ou une suppression : une creation ne
+ * peut pas etre en conflit de version cote serveur.
+ */
+export function rebaserMutationOuvrage(id: string, nouvelleBaseVersion: number): void {
+  file = file.map((mutation) => {
+    if (mutation.id !== id || mutation.cible !== "ouvrage" || mutation.mutation.nature === "creation") {
+      return mutation;
+    }
+
+    return {
+      ...mutation,
+      statut: "en_attente",
+      mutation: { ...mutation.mutation, baseVersion: nouvelleBaseVersion }
+    };
+  });
   persister();
   notifier();
 }

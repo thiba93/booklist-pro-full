@@ -9,6 +9,7 @@ import {
   enfilerSuppressionOuvrage,
   marquerStatutMutation,
   obtenirFileMutations,
+  rebaserMutationOuvrage,
   reinitialiserFileMutationsPourTests,
   retirerMutation
 } from "../services/sync/mutationQueue";
@@ -84,6 +85,28 @@ describe("mutationQueue", () => {
     const file = obtenirFileMutations();
     expect(file).toHaveLength(1);
     expect(file[0]).toMatchObject({ id: "m2", mutation: { nature: "suppression" } });
+  });
+
+  it("rebases a conflicted modification onto the server version and resets it to pending", () => {
+    enfilerModificationOuvrage("m1", "book-1", { titre: "Dune", auteur: "F. Herbert", annee: 1965 }, 3);
+    marquerStatutMutation("m1", "conflit", { versionAttendue: 4 });
+
+    rebaserMutationOuvrage("m1", 4);
+
+    const file = obtenirFileMutations();
+    expect(file[0]).toMatchObject({
+      id: "m1",
+      statut: "en_attente",
+      mutation: { nature: "modification", baseVersion: 4 }
+    });
+  });
+
+  it("does nothing when asked to rebase a creation (no server version to rebase onto)", () => {
+    enfilerCreationOuvrage("m1", payload);
+
+    rebaserMutationOuvrage("m1", 4);
+
+    expect(obtenirFileMutations()[0]).toMatchObject({ mutation: { nature: "creation" } });
   });
 
   it("survives a reload: persisted mutations are restored via chargerFileMutations", async () => {

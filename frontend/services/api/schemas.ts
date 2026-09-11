@@ -107,8 +107,14 @@ export const syncResponseSchema = z.object({
       z.object({
         id: syncResultIdSchema,
         statut: z.literal("conflit"),
-        serveur: bookSchema,
-        versionAttendue: z.number()
+        // serveur/versionAttendue sont absents quand le serveur rejoue un
+        // conflit deja memorise (mutation deja traitee lors d'un envoi
+        // precedent) : il renvoie alors { rejeu: true, livre: null } sans
+        // reponter la version courante. Voir docs/ADR/003-resolution-conflits.md.
+        serveur: bookSchema.optional(),
+        versionAttendue: z.number().optional(),
+        livre: bookSchema.nullable().optional(),
+        rejeu: z.boolean().optional()
       }),
       z.object({
         id: syncResultIdSchema,

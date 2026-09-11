@@ -1,12 +1,16 @@
 import type { MutationNote, MutationOuvrage } from "../../domain/sync/offlineMutation";
+import { deciderSortMutationConflit } from "../../domain/sync/resolutionConflits";
 import { createBookNote, deleteBookNote } from "../api/booksApi";
 import { syncBooks, type SyncMutation } from "../api/systemApi";
 import {
   chargerFileMutations,
   marquerStatutMutation,
   obtenirFileMutations,
+  rebaserMutationOuvrage,
   retirerMutation
 } from "./mutationQueue";
+
+const PROFONDEUR_MAX_REJEU = 1;
 
 function versMutationSync(mutation: MutationOuvrage): SyncMutation {
   const charge = mutation.mutation;
@@ -36,7 +40,15 @@ function estErreurReseau(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { type?: unknown }).type === "ErreurReseau";
 }
 
-async function rejouerOuvrages(mutations: readonly MutationOuvrage[]): Promise<void> {
+/**
+ * Rejoue un lot d'ouvrages. Retourne `true` si au moins une mutation en
+ * conflit a ete rebasee et doit etre retentee immediatement (voir
+ * deciderSortMutationConflit).
+ */
+async function rejouerOuvrages(mutations: readonly MutationOuvrage[]): Promise<boolean> {
+  const parId = new Map(mutations.map((mutation) => [mutation.id, mutation]));
+  let unRebase = false;
+
   try {
     const reponse = await syncBooks(mutations.map(versMutationSync));
 
@@ -51,10 +63,33 @@ async function rejouerOuvrages(mutations: readonly MutationOuvrage[]): Promise<v
       }
 
       if (resultat.statut === "conflit") {
-        marquerStatutMutation(resultat.id, "conflit", {
-          serveur: resultat.serveur,
-          versionAttendue: resultat.versionAttendue
-        });
+        const origine = parId.get(resultat.id);
+
+        // Un conflit deja traite lors d'un envoi precedent est rejoue par
+        // le serveur sans reponter la version courante (voir
+        // docs/ADR/003-resolution-conflits.md). Sans cette info, aucune
+        // decision fiable n'est possible : on abandonne prudemment plutot
+        // que de rebaser a l'aveugle sur une version qu'on ne connait pas.
+        const decision =
+          origine && resultat.serveur
+            ? deciderSortMutationConflit({
+                mutationCreeLe: origine.creeLe,
+                serveurMisAJourLe: resultat.serveur.updatedAt
+              })
+            : "abandonner";
+
+        if (decision === "reappliquer" && resultat.versionAttendue !== undefined) {
+          rebaserMutationOuvrage(resultat.id, resultat.versionAttendue);
+          unRebase = true;
+        } else {
+          // Le serveur fait foi : la mutation est conservee, marquee
+          // terminale (visible via l'indicateur "conflit"), mais plus
+          // jamais rejouee. Le prochain refetch reaffichera l'etat serveur.
+          marquerStatutMutation(resultat.id, "conflit", {
+            serveur: resultat.serveur,
+            versionAttendue: resultat.versionAttendue
+          });
+        }
         return;
       }
 
@@ -64,6 +99,8 @@ async function rejouerOuvrages(mutations: readonly MutationOuvrage[]): Promise<v
     // Panne reseau ou serveur : la file reste intacte, le prochain retour en
     // ligne (ou redemarrage) retentera le lot complet.
   }
+
+  return unRebase;
 }
 
 /**
@@ -110,7 +147,7 @@ export function rejouerFileMutations(): Promise<void> {
   return rejeuEnCours;
 }
 
-async function executerRejeu(): Promise<void> {
+async function executerRejeu(profondeur = 0): Promise<void> {
   await chargerFileMutations();
   const file = obtenirFileMutations();
 
@@ -120,7 +157,16 @@ async function executerRejeu(): Promise<void> {
   const notes = file.filter((mutation) => mutation.cible === "note" && mutation.statut === "en_attente");
 
   if (ouvrages.length > 0) {
-    await rejouerOuvrages(ouvrages);
+    const unRebase = await rejouerOuvrages(ouvrages);
+
+    // Une mutation rebasee (voir deciderSortMutationConflit) est retentee
+    // tout de suite plutot que d'attendre la prochaine transition reseau.
+    // Profondeur bornee : un rebase qui reconflit aussitot est laisse pour
+    // le prochain cycle plutot que de boucler indefiniment.
+    if (unRebase && profondeur < PROFONDEUR_MAX_REJEU) {
+      await executerRejeu(profondeur + 1);
+      return;
+    }
   }
 
   // Rejeu sequentiel volontaire : pas de lot serveur pour les notes, et
