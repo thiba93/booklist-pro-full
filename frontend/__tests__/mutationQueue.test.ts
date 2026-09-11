@@ -87,15 +87,19 @@ describe("mutationQueue", () => {
     expect(file[0]).toMatchObject({ id: "m2", mutation: { nature: "suppression" } });
   });
 
-  it("rebases a conflicted modification onto the server version and resets it to pending", () => {
+  it("rebases a conflicted modification onto the server version, resets it to pending, and gives it a fresh id", () => {
     enfilerModificationOuvrage("m1", "book-1", { titre: "Dune", auteur: "F. Herbert", annee: 1965 }, 3);
     marquerStatutMutation("m1", "conflit", { versionAttendue: 4 });
 
     rebaserMutationOuvrage("m1", 4);
 
     const file = obtenirFileMutations();
+    expect(file).toHaveLength(1);
+    // Un nouvel id est genere (voir rebaserMutationOuvrage) : renvoyer le
+    // meme id ferait rejouer le resultat de conflit deja memorise cote
+    // serveur au lieu de re-evaluer le nouveau baseVersion.
+    expect(file[0]?.id).not.toBe("m1");
     expect(file[0]).toMatchObject({
-      id: "m1",
       statut: "en_attente",
       mutation: { nature: "modification", baseVersion: 4 }
     });

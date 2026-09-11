@@ -81,35 +81,49 @@ describe("rejouerFileMutations", () => {
     expect(file.find((m) => m.id === "m2")).toMatchObject({ statut: "conflit", versionAttendue: 4 });
   });
 
-  it("rebases and immediately retries a conflicted mutation more recent than the server's known update", async () => {
+  it("rebases (with a fresh id) and immediately retries a conflicted mutation more recent than the server's known update", async () => {
     enfilerModificationOuvrage("m1", "book-2", { titre: "Dune Messiah 2", auteur: "Frank Herbert", annee: 1969 }, 3);
 
-    vi.mocked(syncBooks)
-      .mockResolvedValueOnce({
-        resultats: [
-          {
-            id: "m1",
-            statut: "conflit",
-            // Anterieur a "maintenant" (creeLe de m1) : l'intention locale gagne.
-            serveur: { ...livreServeur, updatedAt: "2020-06-01T00:00:00.000Z" },
-            versionAttendue: 4
-          }
-        ],
-        resume: { total: 1, ok: 0, conflits: 1, erreurs: 0 },
-        serveurLe: "2026-01-01T00:00:00.000Z"
-      })
-      .mockResolvedValueOnce({
-        resultats: [{ id: "m1", statut: "ok", livre: null }],
+    // Le deuxieme envoi porte un id different du premier (voir
+    // rebaserMutationOuvrage) : la reponse mockee doit refleter l'id
+    // REELLEMENT envoye plutot que de le fixer en dur, sinon le test ne
+    // detecterait pas une regression qui reutiliserait "m1" (et rejouerait
+    // alors le resultat memorise cote serveur - le vrai bug rencontre en
+    // manuel, voir ADR 003).
+    vi.mocked(syncBooks).mockImplementation(async (mutations) => {
+      const idEnvoye = mutations[0]?.id ?? "";
+
+      if (idEnvoye === "m1") {
+        return {
+          resultats: [
+            {
+              id: "m1",
+              statut: "conflit",
+              // Anterieur a "maintenant" (creeLe de m1) : l'intention locale gagne.
+              serveur: { ...livreServeur, updatedAt: "2020-06-01T00:00:00.000Z" },
+              versionAttendue: 4
+            }
+          ],
+          resume: { total: 1, ok: 0, conflits: 1, erreurs: 0 },
+          serveurLe: "2026-01-01T00:00:00.000Z"
+        };
+      }
+
+      return {
+        resultats: [{ id: idEnvoye, statut: "ok", livre: null }],
         resume: { total: 1, ok: 1, conflits: 0, erreurs: 0 },
         serveurLe: "2026-01-01T00:00:01.000Z"
-      });
+      };
+    });
 
     await rejouerFileMutations();
 
     expect(syncBooks).toHaveBeenCalledTimes(2);
-    // Le deuxieme appel envoie la mutation rebasee sur la version serveur.
-    expect(vi.mocked(syncBooks).mock.calls[1]?.[0]).toMatchObject([{ id: "m1", baseVersion: 4 }]);
-    expect(obtenirFileMutations().find((m) => m.id === "m1")).toBeUndefined();
+    const idRebase = vi.mocked(syncBooks).mock.calls[1]?.[0][0]?.id;
+    expect(idRebase).toBeDefined();
+    expect(idRebase).not.toBe("m1");
+    expect(vi.mocked(syncBooks).mock.calls[1]?.[0]).toMatchObject([{ baseVersion: 4 }]);
+    expect(obtenirFileMutations()).toHaveLength(0);
   });
 
   it("abandons a replayed conflict missing serveur/versionAttendue instead of rebasing blindly (regression)", async () => {
