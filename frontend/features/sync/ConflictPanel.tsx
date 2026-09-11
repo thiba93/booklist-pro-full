@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { titreDepuisInconnu } from "../../domain/books/book";
 import type { MutationOuvrage } from "../../domain/sync/offlineMutation";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { rebaserMutationOuvrage, retirerMutation } from "../../services/sync/mutationQueue";
@@ -8,20 +9,6 @@ import { rejouerFileMutations } from "../../services/sync/replaySync";
 import { useTranslation } from "../../services/i18n/I18nProvider";
 import { useThemeMode } from "../../theme/ThemeProvider";
 import type { Theme } from "../../theme/theme";
-
-/** Lit le titre du livre serveur au moment du conflit, si connu (voir useConflictedMutations). */
-function titreServeur(mutation: MutationOuvrage): string | null {
-  const serveur = mutation.serveur;
-  if (
-    typeof serveur === "object" &&
-    serveur !== null &&
-    "titre" in serveur &&
-    typeof (serveur as { titre: unknown }).titre === "string"
-  ) {
-    return (serveur as { titre: string }).titre;
-  }
-  return null;
-}
 
 /**
  * Rend visible et actionnable ce que le bandeau permanent se contente de
@@ -85,7 +72,7 @@ export function ConflictPanel() {
         ) : null}
       </View>
       {conflits.map((mutation) => {
-        const titre = titreServeur(mutation);
+        const titre = titreDepuisInconnu(mutation.serveur);
         const peutReappliquer = mutation.versionAttendue !== undefined && isOnline;
 
         return (

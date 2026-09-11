@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { Book } from "../../domain/books/book";
-import type { ApiError } from "../../services/api/apiErrors";
+import type { ApiError, ErreurConflit } from "../../services/api/apiErrors";
 import type { BookUpdatePayload } from "../../services/api/booksApi";
 
 const fieldNames = ["titre", "auteur", "editeur", "annee", "note", "lu", "favori"] as const;
@@ -100,4 +100,16 @@ export function validationErrorsFromApi(error: unknown): BookFieldErrors {
   });
 
   return fieldErrors;
+}
+
+/**
+ * Un vrai 409 HTTP (PUT /books/:id avec If-Match perime) : quelqu'un a
+ * modifie l'ouvrage entre le chargement du formulaire et la soumission.
+ * Distinct des conflits de la file hors ligne (POST /sync, voir
+ * docs/ADR/003-resolution-conflits.md) : ici l'utilisateur est present et
+ * en ligne, donc pas de decision automatique (LWW) - BookFormScreen lui
+ * propose directement le choix garder serveur / reappliquer.
+ */
+export function conflictFromApi(error: unknown): ErreurConflit | null {
+  return isApiError(error) && error.type === "ErreurConflit" ? error : null;
 }
