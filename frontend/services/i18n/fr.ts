@@ -36,6 +36,13 @@ export const fr = {
   "network.pending": "{{count}} mutation(s) en attente",
   "network.conflict": "Conflit a resoudre",
 
+  "syncConflict.title": "Conflits de synchronisation ({{count}})",
+  "syncConflict.dismissAll": "Tout ignorer",
+  "syncConflict.messageWithTitle": "\"{{titre}}\" a ete modifie ailleurs entre-temps. Votre modification hors ligne n'a pas ete appliquee.",
+  "syncConflict.messageGeneric": "Cet ouvrage a ete modifie ailleurs entre-temps. Votre modification hors ligne n'a pas ete appliquee.",
+  "syncConflict.keepServer": "Garder la version du serveur",
+  "syncConflict.reapply": "Reappliquer ma modification",
+
   "bookList.kicker": "BookList Pro",
   "bookList.title": "Ouvrages",
   "bookList.add": "Ajouter",

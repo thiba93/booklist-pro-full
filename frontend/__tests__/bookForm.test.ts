@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   bookFormSchema,
+  conflictFromApi,
   formValuesToBookPayload,
   validationErrorsFromApi
 } from "../features/books/bookForm";
@@ -58,5 +59,25 @@ describe("book form", () => {
       titre: "champ obligatoire",
       annee: "annee invalide"
     });
+  });
+
+  it("recognizes a real 409 (online edit conflict) and extracts it", () => {
+    const serveur = { id: "book-1", titre: "Dune", version: 4 };
+    const error = mapApiError(409, {
+      erreur: "conflit",
+      message: "Ce livre a ete modifie entre temps.",
+      serveur,
+      versionAttendue: 4
+    });
+
+    const conflit = conflictFromApi(error);
+    expect(conflit).not.toBeNull();
+    expect(conflit?.versionAttendue).toBe(4);
+    expect(conflit?.serveur).toBe(serveur);
+  });
+
+  it("does not mistake a validation error for a conflict", () => {
+    const error = mapApiError(422, { erreur: "validation", champs: { titre: "obligatoire" } });
+    expect(conflictFromApi(error)).toBeNull();
   });
 });

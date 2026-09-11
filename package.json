@@ -9,9 +9,9 @@
     "dev": "node --watch src/server.js",
     "seed": "node src/seed.js",
     "seed:small": "node src/seed.js 50",
-    "chaos": "CHAOS_LATENCE=1500 CHAOS_ECHEC=0.3 node src/server.js",
-    "auth": "AUTH_REQUIRED=true node src/server.js",
-    "final": "AUTH_REQUIRED=true CHAOS_LATENCE=1500 CHAOS_ECHEC=0.3 node src/server.js",
+    "chaos": "cross-env CHAOS_LATENCE=1500 CHAOS_ECHEC=0.3 node src/server.js",
+    "auth": "cross-env AUTH_REQUIRED=true node src/server.js",
+    "final": "cross-env AUTH_REQUIRED=true CHAOS_LATENCE=1500 CHAOS_ECHEC=0.3 node src/server.js",
     "test:api": "node scripts/smoke-test.js"
   },
   "dependencies": {
@@ -22,5 +22,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
   }
 }

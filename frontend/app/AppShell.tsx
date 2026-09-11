@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from "../features/auth/AuthProvider";
 import { ForbiddenBanner } from "../features/auth/ForbiddenBanner";
 import { LoginScreen } from "../features/auth/LoginScreen";
 import { HomeScreen } from "../features/home/HomeScreen";
+import { ConflictPanel } from "../features/sync/ConflictPanel";
 import { useSyncReplay } from "../features/sync/useSyncReplay";
 import { I18nProvider, useTranslation } from "../services/i18n/I18nProvider";
 import { hydrateQueryClient, persistQueryClient } from "../services/storage/queryPersister";
@@ -82,6 +83,7 @@ export function AppShell() {
             */}
             <View style={styles.root}>
               <ConnectivityBar />
+              <ConflictPanel />
               {isCacheReady ? (
                 <AuthProvider>
                   <StatusBarForTheme />

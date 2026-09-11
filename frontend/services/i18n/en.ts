@@ -38,6 +38,13 @@ export const en: Record<TranslationKey, string> = {
   "network.pending": "{{count}} pending mutation(s)",
   "network.conflict": "Conflict to resolve",
 
+  "syncConflict.title": "Sync conflicts ({{count}})",
+  "syncConflict.dismissAll": "Dismiss all",
+  "syncConflict.messageWithTitle": "\"{{titre}}\" was changed elsewhere in the meantime. Your offline change was not applied.",
+  "syncConflict.messageGeneric": "This book was changed elsewhere in the meantime. Your offline change was not applied.",
+  "syncConflict.keepServer": "Keep the server version",
+  "syncConflict.reapply": "Reapply my change",
+
   "bookList.kicker": "BookList Pro",
   "bookList.title": "Books",
   "bookList.add": "Add",

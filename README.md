@@ -1,323 +1,271 @@
-# API BookList Pro - v2
+# BookList Pro
 
-API Express fournie pour l'évaluation finale React Native **niveau M2**.
-Elle remplace la v1 (`MaDesOcr/API-BOOKS`) et ajoute : pagination et filtrage serveur,
-versionnement des ressources, synchronisation par lot, statistiques, authentification JWT,
-et un mode dégradé « chaos ».
+Application de gestion de bibliotheque personnelle (React Native / Expo)
+adossee a une API Express fournie (`api-books-v2/`). Projet realise dans le
+cadre de l'evaluation React Native niveau M2, en plusieurs lots successifs.
+
+> La documentation exhaustive de l'API (routes, modele de donnees, codes
+> d'erreur, mode chaos) vit dans [`api-books-v2/README.md`](api-books-v2/README.md).
+> Ce fichier couvre la vue d'ensemble du projet : demarrage, comptes de
+> demonstration, travail realise et retours d'experience.
+
+## Structure du depot
+
+```text
+api-books-v2/   API Express fournie (livres, notes, auth, sync, stats) — reference a utiliser
+frontend/       Application Expo (React Native + TypeScript strict)
+src/            Duplicata de l'API a la racine (scaffolding initial) — ne pas utiliser, ecoute
+                aussi sur le port 3000 par defaut : source de confusion si les deux tournent
+```
 
 ---
 
-## Démarrage
+## Demarrage
+
+Deux serveurs a lancer, dans deux terminaux separes.
+
+### 1. Backend (`api-books-v2/`)
 
 ```bash
+cd api-books-v2
 npm install
-npm run seed          # génère 500 livres, 2 comptes utilisateurs
-npm start             # http://localhost:3000
+npm run seed          # genere 500 livres + les 2 comptes de demo
+npm run auth           # AUTH_REQUIRED=true, port 3000 par defaut
 ```
 
-Vérification : <http://localhost:3000/health>
+Sous PowerShell, la syntaxe `VAR=valeur commande` ne fonctionne pas :
 
-### Scripts disponibles
-
-| Commande | Effet |
-|---|---|
-| `npm start` | Serveur normal, **authentification désactivée** (paliers 10 → 16) |
-| `npm run seed` | Régénère la base : 500 livres |
-| `npm run seed:small` | 50 livres, pour le développement |
-| `npm run auth` | Serveur avec **authentification obligatoire** (palier 18) |
-| `npm run chaos` | Serveur en mode dégradé (latence 1,5 s, 30 % d'échecs) |
-| `npm run final` | Auth + chaos : **les conditions de l'évaluation** |
-| `npm run test:api` | Test de fumée de toutes les routes |
-
-### Variables d'environnement
-
-| Variable | Défaut | Rôle |
-|---|---|---|
-| `PORT` | `3000` | Port d'écoute |
-| `AUTH_REQUIRED` | `false` | Active l'authentification et les rôles |
-| `ACCESS_TOKEN_TTL` | `120s` | Durée de vie du jeton d'accès — volontairement courte |
-| `REFRESH_TOKEN_TTL` | `7d` | Durée de vie du jeton de rafraîchissement |
-| `CHAOS_LATENCE` | `0` | Latence artificielle en ms (+ jitter de 40 %) |
-| `CHAOS_ECHEC` | `0` | Probabilité de réponse 503, entre 0 et 1 |
-| `CHAOS_AUTH` | `false` | Applique aussi le chaos aux routes `/auth` |
-| `JWT_SECRET` | valeur de dev | Secret de signature |
-
-> Le mode chaos épargne `/auth` par défaut : sinon la reconnexion devient elle-même aléatoire et
-> le débogage impossible.
-
----
-
-## Modèle de données
-
-```ts
-type Livre = {
-  id: string;            // uuid
-  titre: string;
-  auteur: string;
-  editeur: string;
-  annee: number;         // 1450 → année prochaine
-  lu: boolean;
-  favori: boolean;
-  note: number | null;   // 0 à 5
-  couverture: string | null;
-  createdAt: string;     // ISO
-  updatedAt: string;     // ISO
-  version: number;       // incrémenté à chaque écriture
-};
-
-type Note = {
-  id: string;
-  livreId: string;
-  contenu: string;       // 1000 caractères max
-  createdAt: string;
-};
+```powershell
+cd api-books-v2
+npm install
+npm run seed
+$env:AUTH_REQUIRED = "true"; npm start
 ```
 
-**Différence avec la v1** : le champ s'appelle `titre` (et non `nom`), et `GET /books` renvoie
-un objet paginé, pas un tableau.
+Verification : <http://localhost:3000/health>
 
----
+> **Port 3000 deja pris ?** Sur certains postes, Grafana (ou un autre outil
+> deja installe) ecoute par defaut sur ce port et n'a rien a voir avec le
+> projet. Solution la plus simple : demarrer l'API sur un autre port sans
+> rien desinstaller :
+>
+> ```powershell
+> $env:PORT = "3001"; $env:AUTH_REQUIRED = "true"; npm start
+> ```
+>
+> Adapter alors `EXPO_PUBLIC_API_URL` cote frontend (voir plus bas).
 
-## Routes
-
-### Santé
-
-```
-GET /health
-→ { statut, version, authRequise, chaos: { latence, tauxEchec }, livres, notes }
-```
-
-### Livres
-
-```
-GET /books?page=1&limit=20&q=&status=lu|nonlu&favori=true|false&auteur=&sort=&order=
-```
-
-| Paramètre | Valeurs | Défaut |
-|---|---|---|
-| `page` | ≥ 1 | 1 |
-| `limit` | 1 à 100 (plafonné) | 20 |
-| `q` | recherche titre + auteur, insensible aux accents | — |
-| `status` | `lu`, `nonlu` | — |
-| `favori` | `true`, `false` | — |
-| `sort` | `titre`, `auteur`, `annee`, `note`, `updatedAt` | `titre` |
-| `order` | `asc`, `desc` | `asc` |
-
-```json
-200 → {
-  "items": [ … ],
-  "page": 1,
-  "limit": 20,
-  "total": 500,
-  "totalPages": 25
-}
-```
-
-```
-GET    /books/:id          → 200 Livre  (en-tête ETag = version)  |  404
-POST   /books              → 201 Livre  |  422 { erreur, champs }
-PUT    /books/:id          → 200 Livre  |  404  |  409  |  422
-PATCH  /books/:id          → 200 Livre  (mise à jour partielle)
-DELETE /books/:id          → 204  |  404
-```
-
-**PUT exige une représentation complète** (`titre`, `auteur`, `annee` obligatoires).
-Pour une modification partielle — basculer `lu` ou `favori` — utilisez **PATCH**.
-
-#### Détection de conflit
-
-Envoyez l'en-tête `If-Match` avec la version que vous croyez à jour :
-
-```
-PUT /books/:id
-If-Match: 3
-```
-
-- version identique → écriture acceptée, `version` incrémentée ;
-- version périmée → **409** :
-
-```json
-{
-  "erreur": "conflit",
-  "message": "Ce livre a été modifié entre temps.",
-  "serveur": { … livre actuel … },
-  "versionAttendue": 7
-}
-```
-
-- en-tête absent → écriture acceptée sans contrôle (le dernier écrivain gagne).
-  Utile aux paliers 10 à 16 ; **inacceptable au palier 18**.
-
-### Notes
-
-```
-GET    /books/:id/notes                 → 200 Note[]  (plus récente d'abord)
-POST   /books/:id/notes  { contenu }    → 201 Note  |  422
-DELETE /books/:livreId/notes/:noteId    → 204  |  404
-```
-
-### Statistiques
-
-```
-GET /stats
-→ {
-  total, lus, nonLus, favoris,
-  moyenneNotes, totalNotes,
-  distributionNotes: [ { note, total } ],
-  parAnnee: [ { annee, total } ],
-  parAuteur: [ { auteur, total } ],   // top 10
-  genereLe
-}
-```
-
-### Synchronisation par lot
-
-```
-POST /sync
-{
-  "mutations": [
-    { "id": "uuid-client-1", "type": "create", "livre": { … } },
-    { "id": "uuid-client-2", "type": "update", "baseVersion": 3, "livre": { "id": "…", … } },
-    { "id": "uuid-client-3", "type": "delete", "livreId": "…", "baseVersion": 5 }
-  ]
-}
-```
-
-```json
-200 → {
-  "resultats": [
-    { "id": "uuid-client-1", "statut": "ok", "livre": { … } },
-    { "id": "uuid-client-2", "statut": "conflit", "serveur": { … }, "versionAttendue": 5 },
-    { "id": "uuid-client-3", "statut": "erreur", "message": "…" }
-  ],
-  "resume": { "total": 3, "ok": 1, "conflits": 1, "erreurs": 1 },
-  "serveurLe": "2026-11-12T09:14:22.104Z"
-}
-```
-
-Règles :
-
-- les mutations sont traitées **dans l'ordre reçu** ;
-- un conflit **n'interrompt pas** le lot ;
-- **idempotence** : un `id` de mutation déjà traité renvoie son résultat mémorisé, avec
-  `"rejeu": true`, sans réappliquer l'opération. Générez cet `id` côté client et **conservez-le**
-  entre deux tentatives — c'est ce qui empêche les doublons après une coupure réseau ;
-- supprimer un livre déjà absent renvoie `ok` (suppression idempotente) ;
-- 200 mutations maximum par lot (`413` au-delà).
-
-### Authentification — palier 18
-
-Inactive par défaut. Activation : `npm run auth` ou `AUTH_REQUIRED=true`.
-
-```
-POST /auth/login    { email, motDePasse }
-→ { accessToken, refreshToken, expiresIn, utilisateur: { id, email, role } }
-
-POST /auth/refresh  { refreshToken }
-→ { accessToken, expiresIn }
-
-GET  /me            Authorization: Bearer <accessToken>
-→ { id, email, role, authRequise }
-```
-
-Comptes créés par le seed :
-
-| Email | Mot de passe | Rôle | Droits |
-|---|---|---|---|
-| `editeur@booklist.fr` | `editeur123` | `editeur` | lecture + écriture |
-| `lecteur@booklist.fr` | `lecteur123` | `lecteur` | lecture seule |
-
-Codes d'erreur d'authentification :
-
-| Code | `erreur` | Signification |
-|---|---|---|
-| 401 | `jeton_absent` | En-tête `Authorization` manquant |
-| 401 | `jeton_expire` | Jeton d'accès expiré → **rafraîchissez et rejouez la requête** |
-| 401 | `jeton_invalide` | Signature invalide ou utilisateur inconnu |
-| 403 | `droits_insuffisants` | Rôle `lecteur` sur une route d'écriture |
-
-`ACCESS_TOKEN_TTL` vaut 120 s par défaut : l'expiration survient **pendant** votre démonstration.
-C'est voulu. Votre intercepteur doit la traiter sans que l'utilisateur ne s'en aperçoive, et ne
-déclencher **qu'un seul** rafraîchissement même si dix requêtes prennent un 401 simultanément.
-
----
-
-## Format des erreurs
-
-Toutes les erreurs suivent la même forme :
-
-```json
-{ "erreur": "code_machine", "message": "Phrase lisible.", "champs": { "titre": "…" } }
-```
-
-| Code HTTP | Quand |
-|---|---|
-| 400 | JSON illisible |
-| 401 / 403 | Authentification / autorisation |
-| 404 | Ressource ou route inconnue |
-| 409 | Conflit de version |
-| 413 | Lot de synchronisation trop grand |
-| 422 | Validation métier (`champs` détaille chaque champ fautif) |
-| 503 | Mode chaos |
-
-Traitez `422` (afficher les erreurs par champ) et `503` (réessayer) **différemment**.
-
----
-
-## Mode chaos
+### 2. Frontend (`frontend/`)
 
 ```bash
-CHAOS_LATENCE=1500 CHAOS_ECHEC=0.3 npm start
+cd frontend
+npm install
+npm run web
 ```
 
-Chaque requête est retardée de `CHAOS_LATENCE` ms (± 40 % de jitter) et a `CHAOS_ECHEC` chances
-sur 1 d'être rejetée en 503. **L'évaluation se déroule dans ce mode.**
+Cree un fichier `frontend/.env.local` (ignore par git) si l'API ne tourne
+pas sur le port par defaut :
 
-Ce qu'il révèle immédiatement :
+```
+EXPO_PUBLIC_API_URL=http://localhost:3001
+```
 
-- l'absence de délai d'expiration côté client ;
-- les mises à jour optimistes sans retour arrière ;
-- les indicateurs de chargement bloquants ;
-- les doubles soumissions ;
-- la perte de saisie utilisateur ;
-- les réessais sans temporisation, qui aggravent la panne.
-
----
-
-## Persistance
-
-Les données sont écrites dans `data/db.json` (écriture atomique, sérialisée).
-Pour repartir de zéro : `npm run seed`.
-Ce fichier est ignoré par Git : chaque poste a sa propre base.
-
----
-
-## Scénario de recette de l'évaluation
-
-À rejouer par le formateur pendant la soutenance, application en mode hors ligne :
+### Verifier que tout fonctionne
 
 ```bash
-# 1. Relever la version courante d'un livre
-curl -s http://localhost:3000/books?limit=1 | head -c 400
-
-# 2. Pendant que l'étudiant modifie ce livre hors ligne, le modifier côté serveur
-curl -X PATCH http://localhost:3000/books/<ID> \
-  -H "Content-Type: application/json" \
-  -d '{"titre":"Modifié par le serveur"}'
-
-# 3. L'étudiant rétablit le réseau : sa synchronisation doit remonter un conflit,
-#    l'appliquer selon la stratégie annoncée, et ne rien perdre.
+cd frontend
+npm run validate   # typecheck + tests Vitest + regles d'architecture
 ```
 
 ---
 
-## Extension attendue côté étudiant
+## Variables d'environnement
 
-L'API est fournie complète. Ce qui reste à votre charge :
+### Backend (`api-books-v2/`)
 
-1. **Le client**, évidemment.
-2. Toute route supplémentaire dont votre application aurait besoin — à justifier en ADR.
-3. Si vous modifiez cette API, versionnez vos changements et documentez-les dans un
-   `CHANGELOG.md` : un correcteur doit pouvoir lancer votre client contre **votre** API.
+| Variable            | Defaut        | Role                                                  |
+| ------------------- | ------------- | ----------------------------------------------------- |
+| `PORT`              | `3000`        | Port d'ecoute                                         |
+| `AUTH_REQUIRED`     | `false`       | Active l'authentification et les roles                |
+| `ACCESS_TOKEN_TTL`  | `120s`        | Duree de vie du jeton d'acces (volontairement courte) |
+| `REFRESH_TOKEN_TTL` | `7d`          | Duree de vie du jeton de rafraichissement             |
+| `CHAOS_LATENCE`     | `0`           | Latence artificielle en ms (mode degrade)             |
+| `CHAOS_ECHEC`       | `0`           | Probabilite de reponse 503 (entre 0 et 1)             |
+| `CHAOS_AUTH`        | `false`       | Applique aussi le chaos aux routes `/auth`            |
+| `JWT_SECRET`        | valeur de dev | Secret de signature des jetons                        |
 
-Signalez tout bug à votre formateur.
+Detail complet : [`api-books-v2/README.md`](api-books-v2/README.md).
+
+### Frontend (`frontend/`)
+
+| Variable                     | Defaut                  | Role                                   |
+| ---------------------------- | ----------------------- | -------------------------------------- |
+| `EXPO_PUBLIC_API_URL`        | `http://localhost:3000` | URL de base de l'API consommee         |
+| `EXPO_PUBLIC_API_TIMEOUT_MS` | `8000`                  | Delai avant abandon d'une requete HTTP |
+
+---
+
+## Comptes de demonstration
+
+Crees par `npm run seed` cote backend :
+
+| Email                 | Mot de passe | Role      | Droits             |
+| --------------------- | ------------ | --------- | ------------------ |
+| `editeur@booklist.fr` | `editeur123` | `editeur` | lecture + ecriture |
+| `lecteur@booklist.fr` | `lecteur123` | `lecteur` | lecture seule      |
+
+---
+
+## Contributeurs
+
+| Pseudo GitHub  | Nom             |
+| -------------- | --------------- |
+| `hovominhkhue` | Vo Minh Khue HO |
+| `OvniDeJUL`    | Erdal KARAER    |
+| `thiba93`      | Thibault SENE   |
+
+---
+
+## Travail realise
+
+### Lot 1 — Parcours de base
+
+- Liste paginee des ouvrages (`GET /books`, `limit=20`), recherche par
+  titre/auteur, filtre lu/non lu, tri A-Z/Z-A.
+- Fiche detail, creation, edition complete (`If-Match`), suppression,
+  bascule lu/non lu.
+- Navigation locale liste / detail / ajout / edition.
+- Suppression confirmee puis annulable pendant 5 secondes avant l'appel API.
+- Etat serveur gere par TanStack Query (cles de cache structurees dans
+  `bookQueryKeys.ts`), formulaires `react-hook-form` + `zod`, erreurs `422`
+  mappees aux champs concernes.
+
+### Lot 2 — Enrichissement des parcours ouvrages
+
+- Notes de lecture horodatees (ajout / suppression).
+- Coup de coeur (favori) dans la liste et la fiche.
+- Recherche serveur avec debounce (300 ms) et annulation des requetes
+  precedentes via `AbortSignal`.
+- Filtres serveur (lu/non lu, favori) et tri serveur (titre, auteur, annee,
+  note).
+- Mutations optimistes (lu/favori) avec restauration automatique si le
+  serveur refuse.
+
+### Lot 3 — Finition UI et robustesse
+
+- Theme clair/sombre persiste, traductions FR/EN avec bascule a chaud.
+- Couvertures : resolution, upload, suppression ; notation par etoiles.
+- Enrichissement OpenLibrary sur la fiche detail, resilient aux echecs et
+  au rate-limit de l'API tierce.
+- Optimisation de rendu de la liste (`BookRow` memoise, callbacks stables,
+  etat "en cours" par ligne plutot que global) — mesuree par un test de
+  performance reproductible, voir
+  [`frontend/docs/PERFORMANCE.md`](frontend/docs/PERFORMANCE.md) (facteur
+  ~40-55x sur 200 lignes avec une seule modifiee).
+
+### Lot 4 — Authentification, hors ligne, conflits
+
+**Authentification**
+
+- Ecran de connexion, session persistee (refreshToken en stockage local),
+  deconnexion.
+- `POST /auth/login`, `POST /auth/refresh`, `GET /me`.
+- Intercepteur HTTP unique (`services/api/httpClient.ts`) : injection du
+  jeton, detection du 401 `jeton_expire`, rafraichissement silencieux a vol
+  unique meme si dix requetes recoivent un 401 simultanement, puis rejeu de
+  la requete d'origine.
+- Role `lecteur` : aucune action d'ecriture visible dans l'interface. Role
+  `editeur` : actions d'ecriture visibles. 403 affiche clairement via une
+  bannière globale, independante de l'ecran a l'origine de l'appel.
+
+**Hors ligne**
+
+- Abstraction reseau (`services/reseau.ts`, `navigator.onLine` + evenements
+  `online`/`offline` sur le web).
+- Cache local persistant (dernieres reponses reussies rejouees au
+  demarrage) et file de mutations persistee.
+- Ajout, modification et suppression d'un ouvrage ou d'une note possibles
+  hors ligne, sans perte de saisie.
+- Rejeu via `POST /sync` pour les ouvrages (lot unique, idempotent) ; les
+  notes sont rejouees individuellement (pas de lot serveur disponible pour
+  elles).
+- Indicateur permanent : en ligne/hors ligne, nombre de mutations en
+  attente, conflit a resoudre.
+
+**Conflits**
+
+- Gestion des 409, aussi bien pour le rejeu hors ligne (`POST /sync`) que
+  pour une edition en ligne concurrente (`PUT /books/:id`).
+- Fonction pure testee isolement pour decider du sort d'une mutation en
+  conflit (derniere intention connue gagne, comparaison d'horodatage).
+- Strategie documentee dans
+  [`frontend/docs/ADR/003-resolution-conflits.md`](frontend/docs/ADR/003-resolution-conflits.md),
+  alternatives ecartees comprises.
+- Panneau de resolution manuelle (garder la version serveur / reappliquer
+  sa modification) quand la resolution automatique ne peut pas trancher
+  seule.
+
+### Lot 5 — non traite
+
+Laisse de cote faute de temps.
+
+---
+
+## Choses apprises pendant ce cours
+
+- **React Query a son propre detecteur reseau**, independant de celui
+  qu'on ecrit soi-meme : `networkMode: "always"` est necessaire sur les
+  mutations des qu'on gere sa propre logique hors ligne, sinon React Query
+  met lui-meme en pause l'execution avant meme d'atteindre notre code — un
+  vrai bug rencontre et corrige durant ce lot.
+- **Un mutex applicatif tient en quelques lignes** : la file de mutations
+  hors ligne, sa persistance, et le rejeu par lot ne demandent pas de
+  librairie tierce — un module singleton avec pub/sub (`ecouterFileMutations`)
+  suffit a piloter un indicateur d'etat reactif depuis plusieurs composants.
+- **L'idempotence cote serveur a ses limites cote client.** Rejouer une
+  mutation deja traitee avec le meme identifiant renvoie le resultat
+  memorise (utile contre les doublons), mais rebaser une mutation en
+  conflit sur une nouvelle version DOIT changer d'identifiant, sinon le
+  serveur renvoie l'ancien resultat au lieu de reevaluer — bug reel
+  rencontre, diagnostique en confrontant les tests (qui mockaient la
+  reponse et masquaient le probleme) a de vraies requetes contre l'API.
+- **Resolution de conflits : pas de solution universelle.** Choisir entre
+  "le serveur gagne", "le client gagne" et "dernier ecrit gagne" est un
+  compromis produit, pas une question technique — documenter le choix (et
+  les alternatives ecartees) dans une ADR est plus utile qu'un commentaire
+  de code.
+- **Nouveaux hooks ecrits pendant ce lot** : `useNetworkStatus` (etat
+  reseau reactif), `useMutationQueueStatus` / `useConflictedMutations`
+  (projection reactive d'un module singleton vers des composants React),
+  `useSyncReplay` (declenche le rejeu au retour du reseau et a la
+  connexion), et le decoupage de `useBooksQueries` en variantes
+  online/offline sans dupliquer la logique d'invalidation du cache.
+- **La limite de lignes par fichier (regle d'architecture du projet) pousse
+  a extraire tot** : composants de champs de formulaire, panneaux de
+  resolution de conflit et hooks de requete ont ete separes en fichiers
+  degages plutot que d'accumuler dans un seul, ce qui a naturellement
+  clarifie les responsabilites.
+
+---
+
+## Tests et validation
+
+```bash
+cd frontend
+npm run typecheck        # TypeScript strict
+npm test                 # Vitest
+npm run lint:architecture # regles locales (voir frontend/docs/ADR/0001-frontend-architecture.md)
+npm run validate         # les trois d'un coup
+```
+
+Regles d'architecture appliquees : aucun `any`, aucun `fetch` hors
+`services/api/`, aucune URL d'API dans `app/` ou `components/`, aucun
+fichier applicatif au-dela de 250 lignes.
+
+## Documentation complementaire
+
+- [`api-books-v2/README.md`](api-books-v2/README.md) — reference complete de l'API.
+- [`frontend/README.md`](frontend/README.md) — details techniques du frontend.
+- [`frontend/docs/ADR/0001-frontend-architecture.md`](frontend/docs/ADR/0001-frontend-architecture.md) — organisation du code frontend.
+- [`frontend/docs/ADR/003-resolution-conflits.md`](frontend/docs/ADR/003-resolution-conflits.md) — strategie de resolution des conflits.
+- [`frontend/docs/PERFORMANCE.md`](frontend/docs/PERFORMANCE.md) — optimisation de la liste des ouvrages.

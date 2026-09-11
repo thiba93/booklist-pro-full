@@ -217,9 +217,12 @@ export function marquerStatutMutation(
 /**
  * Rebase une mutation "ouvrage" en conflit sur la version serveur actuelle
  * et la remet en attente pour un rejeu immediat (voir
- * deciderSortMutationConflit / docs/ADR/003-resolution-conflits.md). N'a
- * d'effet que sur une modification ou une suppression : une creation ne
- * peut pas etre en conflit de version cote serveur.
+ * deciderSortMutationConflit / ADR 003). Genere un NOUVEL id : le serveur
+ * memorise chaque resultat par id (y compris les conflits), renvoyer le
+ * meme id ferait rejouer l'ANCIEN resultat memorise (conflit degrade, sans
+ * version - section "Limite constatee" de l'ADR) au lieu de re-evaluer le
+ * nouveau baseVersion. N'a d'effet que sur modification/suppression : une
+ * creation ne peut pas etre en conflit de version.
  */
 export function rebaserMutationOuvrage(id: string, nouvelleBaseVersion: number): void {
   file = file.map((mutation) => {
@@ -229,6 +232,7 @@ export function rebaserMutationOuvrage(id: string, nouvelleBaseVersion: number):
 
     return {
       ...mutation,
+      id: genererIdMutation(),
       statut: "en_attente",
       mutation: { ...mutation.mutation, baseVersion: nouvelleBaseVersion }
     };

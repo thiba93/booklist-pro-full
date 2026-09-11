@@ -1,24 +1,27 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Controller, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { LoadingSkeleton, RetryState } from "../../components/feedback/RequestStates";
 import { Screen } from "../../components/layout/Screen";
+import { titreDepuisInconnu } from "../../domain/books/book";
+import type { ErreurConflit } from "../../services/api/apiErrors";
 import { useTranslation } from "../../services/i18n/I18nProvider";
-import type { TranslationKey } from "../../services/i18n/fr";
 import { useThemeMode } from "../../theme/ThemeProvider";
 import {
   bookFormSchema,
   bookToFormValues,
+  conflictFromApi,
   emptyBookFormValues,
   formValuesToBookPayload,
   validationErrorsFromApi,
   type BookFormField,
   type BookFormValues
 } from "./bookForm";
+import { BookFormConflictPanel } from "./BookFormConflictPanel";
+import { BooleanField, BookTextField, NoteField } from "./BookFormFields";
 import { createStyles } from "./BookFormScreen.styles";
-import { StarRating } from "./StarRating";
 import { useBookDetail, useCreateBook, useUpdateBook } from "./useBooksQueries";
 
 type BookFormScreenProps = {
@@ -26,6 +29,17 @@ type BookFormScreenProps = {
   mode: "create" | "edit";
   onCancel: () => void;
   onSaved: (id: string) => void;
+};
+
+/**
+ * Conflit 409 rencontre lors d'une soumission EN LIGNE (voir
+ * BookFormConflictPanel.tsx) : conserve les valeurs saisies pour permettre
+ * un "reappliquer" sans ressaisie (aucune perte de saisie), et le
+ * versionAttendue renvoye par le serveur pour rejouer avec la bonne base.
+ */
+type ConflitFormulaire = {
+  erreur: ErreurConflit;
+  valeurs: BookFormValues;
 };
 
 export function BookFormScreen({ id = "", mode, onCancel, onSaved }: BookFormScreenProps) {
@@ -37,6 +51,7 @@ export function BookFormScreen({ id = "", mode, onCancel, onSaved }: BookFormScr
   const createBook = useCreateBook();
   const updateBook = useUpdateBook();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [conflit, setConflit] = useState<ConflitFormulaire | null>(null);
   const form = useForm<BookFormValues>({
     defaultValues: emptyBookFormValues,
     resolver: zodResolver(bookFormSchema)
@@ -48,38 +63,72 @@ export function BookFormScreen({ id = "", mode, onCancel, onSaved }: BookFormScr
     }
   }, [book.data, form, isEdit]);
 
-  async function submit(values: BookFormValues) {
+  async function envoyer(livreId: string, values: BookFormValues, version: number) {
     setSubmitError(null);
+    setConflit(null);
     const payload = formValuesToBookPayload(values);
 
     try {
-      if (isEdit) {
-        if (!book.data) {
-          return;
-        }
-        const updated = await updateBook.mutateAsync({
-          id: book.data.id,
-          payload,
-          version: book.data.version
-        });
-        onSaved(updated.id);
-      } else {
-        const created = await createBook.mutateAsync(payload);
-        onSaved(created.id);
-      }
+      const updated = await updateBook.mutateAsync({ id: livreId, payload, version });
+      onSaved(updated.id);
     } catch (error) {
-      const fieldErrors = validationErrorsFromApi(error);
-      const entries = Object.entries(fieldErrors) as [BookFormField, string][];
-
-      if (entries.length === 0) {
-        setSubmitError(t("bookForm.submitError"));
+      const conflitApi = conflictFromApi(error);
+      if (conflitApi) {
+        setConflit({ erreur: conflitApi, valeurs: values });
         return;
       }
 
-      entries.forEach(([field, message]) => {
-        form.setError(field, { message });
-      });
+      appliquerErreurFormulaire(error);
     }
+  }
+
+  function appliquerErreurFormulaire(error: unknown) {
+    const fieldErrors = validationErrorsFromApi(error);
+    const entries = Object.entries(fieldErrors) as [BookFormField, string][];
+
+    if (entries.length === 0) {
+      setSubmitError(t("bookForm.submitError"));
+      return;
+    }
+
+    entries.forEach(([field, message]) => {
+      form.setError(field, { message });
+    });
+  }
+
+  async function submit(values: BookFormValues) {
+    if (isEdit) {
+      if (!book.data) {
+        return;
+      }
+      await envoyer(book.data.id, values, book.data.version);
+      return;
+    }
+
+    setSubmitError(null);
+    try {
+      const created = await createBook.mutateAsync(formValuesToBookPayload(values));
+      onSaved(created.id);
+    } catch (error) {
+      appliquerErreurFormulaire(error);
+    }
+  }
+
+  // Le serveur fait foi : on abandonne la saisie, la fiche (rechargee par
+  // onCancel) reaffichera son etat actuel.
+  function garderVersionServeur() {
+    setConflit(null);
+    onCancel();
+  }
+
+  // Renvoie la MEME saisie (valeurs conservees dans `conflit`, aucune
+  // perte) mais avec le versionAttendue du serveur comme nouvelle base.
+  function reappliquerModification() {
+    if (!conflit || !book.data) {
+      return;
+    }
+    const { erreur, valeurs } = conflit;
+    void envoyer(book.data.id, valeurs, erreur.versionAttendue ?? book.data.version);
   }
 
   if (isEdit && book.isLoading) {
@@ -127,8 +176,17 @@ export function BookFormScreen({ id = "", mode, onCancel, onSaved }: BookFormScr
 
         {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
 
+        {conflit ? (
+          <BookFormConflictPanel
+            onKeepServer={garderVersionServeur}
+            onReapply={reappliquerModification}
+            titre={titreDepuisInconnu(conflit.erreur.serveur)}
+          />
+        ) : null}
+
         <View style={styles.actions}>
           <Pressable
+            accessibilityLabel={t("common.save")}
             accessibilityRole="button"
             disabled={isSaving}
             onPress={form.handleSubmit(submit)}
@@ -136,104 +194,16 @@ export function BookFormScreen({ id = "", mode, onCancel, onSaved }: BookFormScr
           >
             <Text style={styles.primaryText}>{isSaving ? t("common.saving") : t("common.save")}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" onPress={onCancel} style={styles.secondaryButton}>
+          <Pressable
+            accessibilityLabel={t("common.cancel")}
+            accessibilityRole="button"
+            onPress={onCancel}
+            style={styles.secondaryButton}
+          >
             <Text style={styles.secondaryText}>{t("common.cancel")}</Text>
           </Pressable>
         </View>
       </ScrollView>
     </Screen>
-  );
-}
-
-type FieldProps = {
-  control: ReturnType<typeof useForm<BookFormValues>>["control"];
-  error?: string | undefined;
-  keyboardType?: "default" | "numeric";
-  name: Exclude<BookFormField, "lu" | "favori" | "note">;
-};
-
-const fieldLabelKeys: Record<FieldProps["name"], TranslationKey> = {
-  titre: "bookForm.fieldTitre",
-  auteur: "bookForm.fieldAuteur",
-  editeur: "bookForm.fieldEditeur",
-  annee: "bookForm.fieldAnnee"
-};
-
-function BookTextField({ control, error, keyboardType = "default", name }: FieldProps) {
-  const { theme } = useThemeMode();
-  const { t } = useTranslation();
-  const styles = createStyles(theme);
-
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{t(fieldLabelKeys[name])}</Text>
-      <Controller
-        control={control}
-        name={name}
-        render={({ field }) => (
-          <TextInput
-            keyboardType={keyboardType}
-            onBlur={field.onBlur}
-            onChangeText={field.onChange}
-            style={styles.input}
-            value={String(field.value)}
-          />
-        )}
-      />
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-    </View>
-  );
-}
-
-function NoteField({ control }: { control: ReturnType<typeof useForm<BookFormValues>>["control"] }) {
-  const { theme } = useThemeMode();
-  const { t } = useTranslation();
-  const styles = createStyles(theme);
-
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{t("bookForm.fieldNote")}</Text>
-      <Controller
-        control={control}
-        name="note"
-        render={({ field }) => {
-          const current = field.value.trim().length > 0 ? Number(field.value) : 0;
-
-          return (
-            <StarRating
-              onChange={(next) => field.onChange(next === current ? "" : String(next))}
-              value={current > 0 ? current : null}
-            />
-          );
-        }}
-      />
-    </View>
-  );
-}
-
-function BooleanField({
-  control,
-  labelKey,
-  name
-}: {
-  control: ReturnType<typeof useForm<BookFormValues>>["control"];
-  labelKey: TranslationKey;
-  name: Extract<BookFormField, "lu" | "favori">;
-}) {
-  const { theme } = useThemeMode();
-  const { t } = useTranslation();
-  const styles = createStyles(theme);
-
-  return (
-    <Controller
-      control={control}
-      name={name}
-      render={({ field }) => (
-        <View style={styles.row}>
-          <Text style={styles.label}>{t(labelKey)}</Text>
-          <Switch onValueChange={field.onChange} value={Boolean(field.value)} />
-        </View>
-      )}
-    />
   );
 }
