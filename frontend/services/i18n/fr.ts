@@ -29,6 +29,13 @@ export const fr = {
   "auth.logout": "Se deconnecter",
   "auth.forbiddenDismiss": "Fermer",
 
+  "app.loadingCache": "Chargement du cache local...",
+
+  "network.online": "En ligne",
+  "network.offline": "Hors ligne",
+  "network.pending": "{{count}} mutation(s) en attente",
+  "network.conflict": "Conflit a resoudre",
+
   "bookList.kicker": "BookList Pro",
   "bookList.title": "Ouvrages",
   "bookList.add": "Ajouter",

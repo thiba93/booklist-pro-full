@@ -31,6 +31,13 @@ export const en: Record<TranslationKey, string> = {
   "auth.logout": "Sign out",
   "auth.forbiddenDismiss": "Dismiss",
 
+  "app.loadingCache": "Loading local cache...",
+
+  "network.online": "Online",
+  "network.offline": "Offline",
+  "network.pending": "{{count}} pending mutation(s)",
+  "network.conflict": "Conflict to resolve",
+
   "bookList.kicker": "BookList Pro",
   "bookList.title": "Books",
   "bookList.add": "Add",
