@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import { ErrorBoundary } from "../components/error/ErrorBoundary";
 import { NetworkStatusBar } from "../components/feedback/NetworkStatusBar";
@@ -10,11 +10,32 @@ import { AuthProvider, useAuth } from "../features/auth/AuthProvider";
 import { ForbiddenBanner } from "../features/auth/ForbiddenBanner";
 import { LoginScreen } from "../features/auth/LoginScreen";
 import { HomeScreen } from "../features/home/HomeScreen";
+import { useSyncReplay } from "../features/sync/useSyncReplay";
 import { I18nProvider, useTranslation } from "../services/i18n/I18nProvider";
 import { hydrateQueryClient, persistQueryClient } from "../services/storage/queryPersister";
+import { chargerFileMutations } from "../services/sync/mutationQueue";
+import { useMutationQueueStatus } from "../services/sync/useMutationQueueStatus";
 import { ThemeProvider, useThemeMode } from "../theme/ThemeProvider";
 
-const queryClient = new QueryClient();
+/**
+ * networkMode "always" sur les MUTATIONS uniquement : React Query a son
+ * propre detecteur online/offline (pause automatiquement toute mutation des
+ * que le navigateur se dit hors ligne) qui entrerait en conflit avec le
+ * notre (services/reseau.ts) et empecherait purement et simplement
+ * mutationFn de s'executer hors ligne - vidant de son sens toute la
+ * strategie de file de mutations.
+ *
+ * Les QUERIES gardent le comportement par defaut ("online") : un refetch en
+ * arriere-plan qui echoue hors ligne doit rester silencieusement en pause,
+ * pas faire basculer une fiche deja chargee (ou creee hors ligne) sur un
+ * ecran d'erreur qui efface les donnees en cache le temps que le timeout
+ * reseau (8s) expire.
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    mutations: { networkMode: "always" }
+  }
+});
 
 export function AppShell() {
   const [isCacheReady, setIsCacheReady] = useState(false);
@@ -22,7 +43,7 @@ export function AppShell() {
   useEffect(() => {
     let annule = false;
 
-    void hydrateQueryClient(queryClient).finally(() => {
+    void Promise.all([hydrateQueryClient(queryClient), chargerFileMutations()]).finally(() => {
       if (!annule) {
         setIsCacheReady(true);
       }
@@ -41,21 +62,49 @@ export function AppShell() {
       <I18nProvider>
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
-            <NetworkStatusBar />
-            {isCacheReady ? (
-              <AuthProvider>
-                <StatusBarForTheme />
-                <ForbiddenBanner />
-                <AuthGate />
-              </AuthProvider>
-            ) : (
-              <LoadingScreen messageKey="app.loadingCache" />
-            )}
+            {/*
+              Seul veritable noeud DOM racine de l'app : ThemeProvider,
+              I18nProvider, ErrorBoundary, QueryClientProvider et
+              AuthProvider ne sont que des Context.Provider, sans element
+              visuel propre. Sans ce View explicite (flexDirection:"column"
+              par defaut sur le web), la barre et le contenu se retrouvent
+              enfants directs du conteneur racine Expo, dont l'axe flex
+              n'est pas garanti - d'ou une mise en page cassee sur le web.
+            */}
+            <View style={styles.root}>
+              <ConnectivityBar />
+              {isCacheReady ? (
+                <AuthProvider>
+                  <StatusBarForTheme />
+                  <ForbiddenBanner />
+                  <SyncReplayEffect />
+                  <AuthGate />
+                </AuthProvider>
+              ) : (
+                <LoadingScreen messageKey="app.loadingCache" />
+              )}
+            </View>
           </QueryClientProvider>
         </ErrorBoundary>
       </I18nProvider>
     </ThemeProvider>
   );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1
+  }
+});
+
+function ConnectivityBar() {
+  const { conflit, enAttente } = useMutationQueueStatus();
+  return <NetworkStatusBar hasConflict={conflit} pendingCount={enAttente} />;
+}
+
+function SyncReplayEffect() {
+  useSyncReplay();
+  return null;
 }
 
 function AuthGate() {

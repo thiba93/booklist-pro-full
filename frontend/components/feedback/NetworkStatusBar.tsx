@@ -43,13 +43,15 @@ function createStyles(theme: Theme, isOnline: boolean, hasConflict: boolean) {
   return StyleSheet.create({
     bar: {
       alignItems: "center",
+      alignSelf: "stretch",
       backgroundColor: hasConflict
         ? theme.colors.danger
         : isOnline
           ? theme.colors.accentSoft
           : theme.colors.skeletonStrong,
       justifyContent: "center",
-      paddingVertical: theme.spacing.xs
+      paddingVertical: theme.spacing.xs,
+      width: "100%"
     },
     text: {
       color: hasConflict ? theme.colors.onAccent : theme.colors.textPrimary,

@@ -7,7 +7,7 @@ import type { Note } from "../../services/api/schemas";
 import { useThemeMode } from "../../theme/ThemeProvider";
 import { useAuth } from "../auth/AuthProvider";
 import { createStyles } from "./BookDetailScreen.styles";
-import { useBookNotes, useCreateBookNote, useDeleteBookNote } from "./useBooksQueries";
+import { useBookNotes, useCreateBookNote, useDeleteBookNote } from "./useBookNotesQueries";
 
 type BookNotesPanelProps = {
   bookId: string;
