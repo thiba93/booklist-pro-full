@@ -126,71 +126,9 @@ Crees par `npm run seed` cote backend :
 
 ---
 
-## Travail realise
-
-### Lot 1 — Parcours de base
-
-- Liste paginee des ouvrages (`GET /books`, `limit=20`), recherche par
-  titre/auteur, filtre lu/non lu, tri A-Z/Z-A.
-- Fiche detail, creation, edition complete (`If-Match`), suppression,
-  bascule lu/non lu.
-- Navigation locale liste / detail / ajout / edition.
-- Suppression confirmee puis annulable pendant 5 secondes avant l'appel API.
-- Etat serveur gere par TanStack Query (cles de cache structurees dans
-  `bookQueryKeys.ts`), formulaires `react-hook-form` + `zod`, erreurs `422`
-  mappees aux champs concernes.
-
-### Lot 2 — Enrichissement des parcours ouvrages
-
-- Notes de lecture horodatees (ajout / suppression).
-- Coup de coeur (favori) dans la liste et la fiche.
-- Recherche serveur avec debounce (300 ms) et annulation des requetes
-  precedentes via `AbortSignal`.
-- Filtres serveur (lu/non lu, favori) et tri serveur (titre, auteur, annee,
-  note).
-- Mutations optimistes (lu/favori) avec restauration automatique si le
-  serveur refuse.
-
-### Lot 3 — Finition UI et robustesse
-
-- Theme clair/sombre persiste, traductions FR/EN avec bascule a chaud.
-- Couvertures : resolution, upload, suppression ; notation par etoiles.
-- Enrichissement OpenLibrary sur la fiche detail, resilient aux echecs et
-  au rate-limit de l'API tierce.
-- Optimisation de rendu de la liste (`BookRow` memoise, callbacks stables,
-  etat "en cours" par ligne plutot que global) — mesuree par un test de
-  performance reproductible, voir
-  [`frontend/docs/PERFORMANCE.md`](frontend/docs/PERFORMANCE.md) (facteur
-  ~40-55x sur 200 lignes avec une seule modifiee).
+## Travail realise après la présentation
 
 ### Lot 4 — Authentification, hors ligne, conflits
-
-**Authentification**
-
-- Ecran de connexion, session persistee (refreshToken en stockage local),
-  deconnexion.
-- `POST /auth/login`, `POST /auth/refresh`, `GET /me`.
-- Intercepteur HTTP unique (`services/api/httpClient.ts`) : injection du
-  jeton, detection du 401 `jeton_expire`, rafraichissement silencieux a vol
-  unique meme si dix requetes recoivent un 401 simultanement, puis rejeu de
-  la requete d'origine.
-- Role `lecteur` : aucune action d'ecriture visible dans l'interface. Role
-  `editeur` : actions d'ecriture visibles. 403 affiche clairement via une
-  bannière globale, independante de l'ecran a l'origine de l'appel.
-
-**Hors ligne**
-
-- Abstraction reseau (`services/reseau.ts`, `navigator.onLine` + evenements
-  `online`/`offline` sur le web).
-- Cache local persistant (dernieres reponses reussies rejouees au
-  demarrage) et file de mutations persistee.
-- Ajout, modification et suppression d'un ouvrage ou d'une note possibles
-  hors ligne, sans perte de saisie.
-- Rejeu via `POST /sync` pour les ouvrages (lot unique, idempotent) ; les
-  notes sont rejouees individuellement (pas de lot serveur disponible pour
-  elles).
-- Indicateur permanent : en ligne/hors ligne, nombre de mutations en
-  attente, conflit a resoudre.
 
 **Conflits**
 
@@ -205,7 +143,7 @@ Crees par `npm run seed` cote backend :
   sa modification) quand la resolution automatique ne peut pas trancher
   seule.
 
-### Lot 5 — non traite
+### Lot 5 — non traité
 
 Laisse de cote faute de temps.
 
