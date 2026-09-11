@@ -29,13 +29,38 @@ type AuthTokens = {
 let authTokens: AuthTokens | null = null;
 let refreshRequest: Promise<string> | null = null;
 
+/**
+ * Notifie de tout changement de jetons (connexion, refresh silencieux,
+ * deconnexion) pour permettre a la couche session (AuthProvider) de
+ * persister le refreshToken sans que httpClient ne connaisse le storage.
+ */
+export type TokensListener = (tokens: Readonly<AuthTokens> | null) => void;
+let tokensListener: TokensListener | null = null;
+
+export function onApiAuthTokensChange(listener: TokensListener | null) {
+  tokensListener = listener;
+}
+
+/**
+ * Notifie les 403 (droits insuffisants) pour permettre un affichage global
+ * clair, independant de l'ecran qui a declenche l'appel.
+ */
+export type ForbiddenListener = (error: ApiError) => void;
+let forbiddenListener: ForbiddenListener | null = null;
+
+export function onApiForbidden(listener: ForbiddenListener | null) {
+  forbiddenListener = listener;
+}
+
 export function setApiAuthTokens(tokens: AuthTokens) {
   authTokens = tokens;
+  tokensListener?.(authTokens);
 }
 
 export function clearApiAuthTokens() {
   authTokens = null;
   refreshRequest = null;
+  tokensListener?.(null);
 }
 
 function buildUrl(path: `/${string}`) {
@@ -139,6 +164,13 @@ function isApiError(error: unknown): error is ApiError {
   return error instanceof Error && "type" in error;
 }
 
+/**
+ * N'accepte a rafraichir que le code d'erreur precis "jeton_expire" (pas
+ * "jeton_invalide" ou "jeton_absent") : un jeton invalide ou absent ne
+ * serait pas reparee par un refresh, autant echouer tout de suite plutot
+ * que de perdre un aller-retour reseau inutile. `skipAuthRefresh` coupe la
+ * boucle pour les appels internes (/auth/refresh lui-meme, login).
+ */
 function shouldRefresh(error: ApiError, options: RequestOptions) {
   return (
     error.type === "ErreurAuth" &&
@@ -149,6 +181,15 @@ function shouldRefresh(error: ApiError, options: RequestOptions) {
   );
 }
 
+/**
+ * Un seul refresh en vol a la fois (`refreshRequest` partage), meme si N
+ * requetes recoivent un 401 simultanement : la premiere a echouer demarre
+ * le refresh et le memorise, les suivantes trouvent `refreshRequest` deja
+ * pose par `??=` et attendent la MEME promesse au lieu d'en relancer une
+ * chacune. Reinitialise a `null` dans le `finally` pour que le prochain
+ * jeton expire declenche un nouveau refresh plutot que de reutiliser une
+ * promesse deja resolue/rejetee.
+ */
 async function refreshAccessToken() {
   const refreshToken = authTokens?.refreshToken;
 
@@ -172,6 +213,17 @@ async function refreshAccessToken() {
   }
 }
 
+/**
+ * Point d'entree unique pour tout appel API applicatif. Intercepte deux
+ * cas transverses independamment de l'appelant :
+ * - 401 "jeton_expire" -> un seul refresh silencieux (voir
+ *   refreshAccessToken) puis rejoue la requete d'origine une fois
+ *   (`skipAuthRefresh: true` pour ne pas boucler si le refresh lui-meme
+ *   echoue et que le retry echoue encore).
+ * - 403 -> notifie forbiddenListener (ecoute par AuthProvider) pour un
+ *   affichage global clair, sans bloquer l'appelant qui recoit quand meme
+ *   l'erreur normalement (il peut avoir sa propre gestion locale en plus).
+ */
 export async function apiRequest<TResponse>(
   path: `/${string}`,
   schema: z.ZodType<TResponse>,
@@ -183,6 +235,10 @@ export async function apiRequest<TResponse>(
     if (isApiError(error) && shouldRefresh(error, options)) {
       await refreshAccessToken();
       return send(path, schema, { ...options, skipAuthRefresh: true });
+    }
+
+    if (isApiError(error) && error.type === "ErreurAuth" && error.status === 403) {
+      forbiddenListener?.(error);
     }
 
     throw error;

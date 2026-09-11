@@ -44,6 +44,11 @@ export function createStyles(theme: Theme) {
     flexDirection: "row",
     justifyContent: "space-between"
   },
+  headerActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: theme.spacing.sm
+  },
   input: {
     borderColor: theme.colors.border,
     borderRadius: theme.radius.sm,

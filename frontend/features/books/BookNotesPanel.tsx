@@ -5,8 +5,9 @@ import { EmptyState, LoadingSkeleton, RetryState } from "../../components/feedba
 import { useTranslation } from "../../services/i18n/I18nProvider";
 import type { Note } from "../../services/api/schemas";
 import { useThemeMode } from "../../theme/ThemeProvider";
+import { useAuth } from "../auth/AuthProvider";
 import { createStyles } from "./BookDetailScreen.styles";
-import { useBookNotes, useCreateBookNote, useDeleteBookNote } from "./useBooksQueries";
+import { useBookNotes, useCreateBookNote, useDeleteBookNote } from "./useBookNotesQueries";
 
 type BookNotesPanelProps = {
   bookId: string;
@@ -16,6 +17,9 @@ export function BookNotesPanel({ bookId }: BookNotesPanelProps) {
   const { theme } = useThemeMode();
   const { t } = useTranslation();
   const styles = createStyles(theme);
+  // Lecteur : ni le champ de saisie ni le bouton "ajouter" ne s'affichent
+  // plus bas, et chaque note perd son bouton de suppression.
+  const { canWrite } = useAuth();
   const notes = useBookNotes(bookId);
   const createNote = useCreateBookNote(bookId);
   const deleteNote = useDeleteBookNote(bookId);
@@ -36,29 +40,35 @@ export function BookNotesPanel({ bookId }: BookNotesPanelProps) {
   return (
     <View style={styles.panel}>
       <Text style={styles.sectionTitle}>{t("bookNotes.title")}</Text>
-      <TextInput
-        accessibilityLabel={t("bookNotes.inputLabel")}
-        multiline
-        onChangeText={setContenu}
-        placeholder={t("bookNotes.inputPlaceholder")}
-        returnKeyType="default"
-        style={styles.noteInput}
-        value={contenu}
-      />
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-      <Pressable
-        accessibilityLabel={t("bookNotes.add")}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: contenu.trim().length === 0 || createNote.isPending }}
-        disabled={contenu.trim().length === 0 || createNote.isPending}
-        onPress={submitNote}
-        style={[
-          styles.primaryButton,
-          (contenu.trim().length === 0 || createNote.isPending) && styles.disabledButton
-        ]}
-      >
-        <Text style={styles.primaryText}>{createNote.isPending ? t("bookNotes.adding") : t("bookNotes.add")}</Text>
-      </Pressable>
+      {canWrite ? (
+        <>
+          <TextInput
+            accessibilityLabel={t("bookNotes.inputLabel")}
+            multiline
+            onChangeText={setContenu}
+            placeholder={t("bookNotes.inputPlaceholder")}
+            returnKeyType="default"
+            style={styles.noteInput}
+            value={contenu}
+          />
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          <Pressable
+            accessibilityLabel={t("bookNotes.add")}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: contenu.trim().length === 0 || createNote.isPending }}
+            disabled={contenu.trim().length === 0 || createNote.isPending}
+            onPress={submitNote}
+            style={[
+              styles.primaryButton,
+              (contenu.trim().length === 0 || createNote.isPending) && styles.disabledButton
+            ]}
+          >
+            <Text style={styles.primaryText}>
+              {createNote.isPending ? t("bookNotes.adding") : t("bookNotes.add")}
+            </Text>
+          </Pressable>
+        </>
+      ) : null}
 
       {notes.isLoading ? <LoadingSkeleton /> : null}
       {notes.isError ? (
@@ -74,7 +84,12 @@ export function BookNotesPanel({ bookId }: BookNotesPanelProps) {
       {notes.isSuccess && notes.data.length > 0 ? (
         <View style={styles.notesList}>
           {notes.data.map((note) => (
-            <NoteRow key={note.id} note={note} onDelete={() => deleteNote.mutate(note.id)} />
+            <NoteRow
+              canWrite={canWrite}
+              key={note.id}
+              note={note}
+              onDelete={() => deleteNote.mutate(note.id)}
+            />
           ))}
         </View>
       ) : null}
@@ -82,7 +97,15 @@ export function BookNotesPanel({ bookId }: BookNotesPanelProps) {
   );
 }
 
-function NoteRow({ note, onDelete }: { note: Note; onDelete: () => void }) {
+function NoteRow({
+  canWrite,
+  note,
+  onDelete
+}: {
+  canWrite: boolean;
+  note: Note;
+  onDelete: () => void;
+}) {
   const { theme } = useThemeMode();
   const { locale, t } = useTranslation();
   const styles = createStyles(theme);
@@ -93,14 +116,16 @@ function NoteRow({ note, onDelete }: { note: Note; onDelete: () => void }) {
         <Text style={styles.noteDate}>{formatNoteDate(note.createdAt, locale)}</Text>
         <Text style={styles.fieldValue}>{note.contenu}</Text>
       </View>
-      <Pressable
-        accessibilityLabel={t("bookNotes.delete")}
-        accessibilityRole="button"
-        onPress={onDelete}
-        style={styles.secondaryButton}
-      >
-        <Text style={styles.secondaryText}>{t("bookNotes.delete")}</Text>
-      </Pressable>
+      {canWrite ? (
+        <Pressable
+          accessibilityLabel={t("bookNotes.delete")}
+          accessibilityRole="button"
+          onPress={onDelete}
+          style={styles.secondaryButton}
+        >
+          <Text style={styles.secondaryText}>{t("bookNotes.delete")}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

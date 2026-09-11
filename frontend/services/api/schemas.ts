@@ -94,6 +94,15 @@ export const meSchema = utilisateurSchema.extend({
 
 const syncResultIdSchema = z.string().nullable();
 
+/**
+ * Reponse de POST /sync (services/api/systemApi.ts), rejouee par
+ * services/sync/replaySync.ts. Chaque resultat est discrimine par `statut`
+ * et correspond a une mutation envoyee dans le meme lot, dans l'ordre. Les
+ * trois variantes tolerent des champs optionnels supplementaires (`livre`,
+ * `rejeu`) que le serveur ajoute selon les cas plutot que de les rendre
+ * obligatoires - un schema trop strict ferait echouer la validation de
+ * TOUTE la reponse (donc de tout le lot) pour un seul resultat inattendu.
+ */
 export const syncResponseSchema = z.object({
   resultats: z.array(
     z.discriminatedUnion("statut", [
@@ -107,8 +116,14 @@ export const syncResponseSchema = z.object({
       z.object({
         id: syncResultIdSchema,
         statut: z.literal("conflit"),
-        serveur: bookSchema,
-        versionAttendue: z.number()
+        // serveur/versionAttendue sont absents quand le serveur rejoue un
+        // conflit deja memorise (mutation deja traitee lors d'un envoi
+        // precedent) : il renvoie alors { rejeu: true, livre: null } sans
+        // reponter la version courante. Voir docs/ADR/003-resolution-conflits.md.
+        serveur: bookSchema.optional(),
+        versionAttendue: z.number().optional(),
+        livre: bookSchema.nullable().optional(),
+        rejeu: z.boolean().optional()
       }),
       z.object({
         id: syncResultIdSchema,

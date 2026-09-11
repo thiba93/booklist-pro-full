@@ -2,12 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   createBook,
-  createBookNote,
   deleteBook,
   deleteBookCover,
-  deleteBookNote,
   getBook,
-  getBookNotes,
   getBooks,
   patchBook,
   updateBook,
@@ -18,8 +15,42 @@ import {
   type BooksQuery
 } from "../../services/api/booksApi";
 import type { Book } from "../../domain/books/book";
-import type { BooksPage, Note } from "../../services/api/schemas";
+import { estEnLigne } from "../../services/reseau";
+import type { BooksPage } from "../../services/api/schemas";
 import { bookKeys } from "./bookQueryKeys";
+import {
+  creerOuvrageHorsLigne,
+  estIdProvisoire,
+  insererOuvrageDansListes,
+  modifierOuvrageHorsLigne,
+  patcherOuvrageHorsLigne,
+  remplacerOuvrageDansListes,
+  retirerOuvrageDesListes,
+  supprimerOuvrageHorsLigne
+} from "./offlineBookMutations";
+
+/**
+ * Hooks CRUD sur les ouvrages. Chaque mutation suit le meme schema :
+ * `if (estEnLigne()) { <appel API reel> } else { <equivalent hors ligne> }`
+ * dans mutationFn (voir features/books/offlineBookMutations.ts pour la
+ * partie hors ligne), pour que React Query n'ait jamais a savoir si l'appel
+ * a vraiment touche le reseau. Cote React Query, `networkMode: "always"`
+ * est indispensable sur les mutations (voir app/AppShell.tsx) : sans lui,
+ * React Query intercepte l'appel AVANT meme d'atteindre ce mutationFn des
+ * qu'il detecte le navigateur hors ligne, empechant purement et simplement
+ * la branche offline ci-dessous de s'executer.
+ */
+
+/**
+ * Une edition/suppression hors ligne d'un ouvrage jamais encore consulte
+ * n'a pas de version de reference en cache pour construire le resultat
+ * local ni enfiler une mutation coherente. Cas limite improbable en usage
+ * normal (le formulaire d'edition charge toujours la fiche au prealable)
+ * mais mieux vaut un message clair qu'un plantage silencieux.
+ */
+function erreurHorsLigneSansCache(): Error {
+  return new Error("Ouvrage indisponible hors ligne : ouvrez-le au moins une fois en ligne d'abord.");
+}
 
 type UpdateBookVariables = {
   id: string;
@@ -48,20 +79,25 @@ export function useBookDetail(id: string, enabled = true) {
   });
 }
 
-export function useBookNotes(id: string) {
-  return useQuery({
-    queryKey: bookKeys.notes(id),
-    queryFn: ({ signal }) => getBookNotes(id, signal)
-  });
-}
-
 export function useCreateBook() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: BookCreatePayload) => createBook(payload),
+    mutationFn: async (payload: BookCreatePayload) => {
+      if (estEnLigne()) {
+        return createBook(payload);
+      }
+
+      return creerOuvrageHorsLigne(payload);
+    },
     onSuccess: async (book) => {
       queryClient.setQueryData(bookKeys.detail(book.id), book);
+
+      if (estIdProvisoire(book.id)) {
+        insererOuvrageDansListes(queryClient, book);
+        return;
+      }
+
       await queryClient.invalidateQueries({ queryKey: bookKeys.lists() });
     }
   });
@@ -71,10 +107,26 @@ export function useUpdateBook() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, payload, version }: UpdateBookVariables) =>
-      updateBook(id, payload, version),
+    mutationFn: async ({ id, payload, version }: UpdateBookVariables) => {
+      if (estEnLigne()) {
+        return updateBook(id, payload, version);
+      }
+
+      const actuel = queryClient.getQueryData<Book>(bookKeys.detail(id));
+      if (!actuel) {
+        throw erreurHorsLigneSansCache();
+      }
+
+      return modifierOuvrageHorsLigne(actuel, payload);
+    },
     onSuccess: async (book) => {
       queryClient.setQueryData(bookKeys.detail(book.id), book);
+
+      if (estIdProvisoire(book.id)) {
+        remplacerOuvrageDansListes(queryClient, book);
+        return;
+      }
+
       await queryClient.invalidateQueries({ queryKey: bookKeys.lists() });
     }
   });
@@ -84,7 +136,18 @@ export function usePatchBook() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, payload }: PatchBookVariables) => patchBook(id, payload),
+    mutationFn: async ({ id, payload }: PatchBookVariables) => {
+      if (estEnLigne()) {
+        return patchBook(id, payload);
+      }
+
+      const actuel = queryClient.getQueryData<Book>(bookKeys.detail(id));
+      if (!actuel) {
+        throw erreurHorsLigneSansCache();
+      }
+
+      return patcherOuvrageHorsLigne(actuel, payload);
+    },
     onMutate: async ({ id, payload }) => {
       await queryClient.cancelQueries({ queryKey: bookKeys.detail(id) });
       await queryClient.cancelQueries({ queryKey: bookKeys.lists() });
@@ -129,50 +192,34 @@ export function usePatchBook() {
   });
 }
 
+// { horsLigne, id } indique a onSuccess la branche prise, sans re-tester estEnLigne().
 export function useDeleteBook() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => deleteBook(id),
-    onSuccess: async (_result, id) => {
-      queryClient.removeQueries({ queryKey: bookKeys.detail(id) });
-      await queryClient.invalidateQueries({ queryKey: bookKeys.lists() });
-    }
-  });
-}
-
-export function useCreateBookNote(id: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (contenu: string) => createBookNote(id, contenu),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: bookKeys.notes(id) });
-    }
-  });
-}
-
-export function useDeleteBookNote(id: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (noteId: string) => deleteBookNote(id, noteId),
-    onMutate: async (noteId) => {
-      await queryClient.cancelQueries({ queryKey: bookKeys.notes(id) });
-      const previousNotes = queryClient.getQueryData<Note[]>(bookKeys.notes(id));
-      queryClient.setQueryData<Note[]>(
-        bookKeys.notes(id),
-        (current) => current?.filter((note) => note.id !== noteId) ?? []
-      );
-      return { previousNotes };
-    },
-    onError: (_error, _noteId, context) => {
-      if (context?.previousNotes) {
-        queryClient.setQueryData(bookKeys.notes(id), context.previousNotes);
+    mutationFn: async (id: string) => {
+      if (estEnLigne()) {
+        await deleteBook(id);
+        return { horsLigne: false, id };
       }
+
+      const actuel = queryClient.getQueryData<Book>(bookKeys.detail(id));
+      if (!actuel) {
+        throw erreurHorsLigneSansCache();
+      }
+
+      supprimerOuvrageHorsLigne(actuel);
+      return { horsLigne: true, id };
     },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: bookKeys.notes(id) });
+    onSuccess: async ({ horsLigne, id }) => {
+      queryClient.removeQueries({ queryKey: bookKeys.detail(id) });
+
+      if (horsLigne) {
+        retirerOuvrageDesListes(queryClient, id);
+        return;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: bookKeys.lists() });
     }
   });
 }

@@ -20,3 +20,11 @@ export async function writePersistedValue(key: string, value: string): Promise<v
     // Persistance best-effort : l'etat en memoire reste correct.
   }
 }
+
+export async function removePersistedValue(key: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(key);
+  } catch {
+    // Persistance best-effort : l'etat en memoire reste correct.
+  }
+}

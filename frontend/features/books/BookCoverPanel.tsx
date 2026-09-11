@@ -7,6 +7,7 @@ import { useTranslation } from "../../services/i18n/I18nProvider";
 import { pickImageFile } from "../../services/media/pickImageFile";
 import { resizeImageToDataUrl } from "../../services/media/resizeImage";
 import { useThemeMode } from "../../theme/ThemeProvider";
+import { useAuth } from "../auth/AuthProvider";
 import { createStyles } from "./BookDetailScreen.styles";
 import { useDeleteBookCover, useUploadBookCover } from "./useBooksQueries";
 
@@ -18,6 +19,9 @@ export function BookCoverPanel({ book }: BookCoverPanelProps) {
   const { theme } = useThemeMode();
   const { t } = useTranslation();
   const styles = createStyles(theme);
+  // Lecteur : ni le bouton "changer" ni "supprimer" ne s'affichent, la
+  // couverture reste consultable en lecture seule.
+  const { canWrite } = useAuth();
   const uploadCover = useUploadBookCover(book.id);
   const deleteCover = useDeleteBookCover(book.id);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +60,7 @@ export function BookCoverPanel({ book }: BookCoverPanelProps) {
         style={styles.cover}
       />
       <View style={styles.coverActions}>
-        {Platform.OS === "web" ? (
+        {canWrite && Platform.OS === "web" ? (
           <>
             <Pressable
               accessibilityLabel={t("cover.changeLabel")}
@@ -85,9 +89,9 @@ export function BookCoverPanel({ book }: BookCoverPanelProps) {
               </Pressable>
             ) : null}
           </>
-        ) : (
+        ) : canWrite ? (
           <Text style={styles.textMuted}>{t("cover.webOnly")}</Text>
-        )}
+        ) : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </View>
     </View>

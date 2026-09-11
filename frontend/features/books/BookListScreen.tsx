@@ -4,6 +4,8 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { EmptyState, LoadingSkeleton, RetryState } from "../../components/feedback/RequestStates";
 import { Screen } from "../../components/layout/Screen";
 import type { Book } from "../../domain/books/book";
+import { AccountBar } from "../auth/AccountBar";
+import { useAuth } from "../auth/AuthProvider";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useTranslation } from "../../services/i18n/I18nProvider";
 import type { BooksQuery } from "../../services/api/booksApi";
@@ -30,6 +32,9 @@ export function BookListScreen({ onCreate, onOpenBook }: BookListScreenProps) {
   const { theme } = useThemeMode();
   const { t } = useTranslation();
   const styles = createStyles(theme);
+  // Role lecteur : le bouton "Ajouter" est masque et BookRows recoit
+  // canWrite=false pour cacher ses propres actions d'ecriture par ligne.
+  const { canWrite } = useAuth();
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<StatusFilter>("tous");
@@ -86,7 +91,10 @@ export function BookListScreen({ onCreate, onOpenBook }: BookListScreenProps) {
             <Text style={styles.kicker}>{t("bookList.kicker")}</Text>
             <Text style={styles.title}>{t("bookList.title")}</Text>
           </View>
-          <SettingsBar />
+          <View style={styles.headerActions}>
+            <AccountBar />
+            <SettingsBar />
+          </View>
         </View>
 
         <View style={styles.filters}>
@@ -122,9 +130,11 @@ export function BookListScreen({ onCreate, onOpenBook }: BookListScreenProps) {
               {order === "asc" ? t("bookList.orderAsc") : t("bookList.orderDesc")}
             </Text>
           </Pressable>
-          <Pressable accessibilityRole="button" onPress={onCreate} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>{t("bookList.add")}</Text>
-          </Pressable>
+          {canWrite ? (
+            <Pressable accessibilityRole="button" onPress={onCreate} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>{t("bookList.add")}</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {books.isLoading ? <LoadingSkeleton /> : null}
@@ -153,6 +163,7 @@ export function BookListScreen({ onCreate, onOpenBook }: BookListScreenProps) {
         {books.isSuccess && books.data.items.length > 0 ? (
           <BookRows
             books={books.data.items}
+            canWrite={canWrite}
             pendingId={pendingId}
             onOpenBook={onOpenBook}
             onToggleFavorite={toggleFavorite}

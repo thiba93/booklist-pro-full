@@ -21,6 +21,23 @@ export const en: Record<TranslationKey, string> = {
 
   "appError.title": "Something went wrong.",
 
+  "auth.title": "Sign in",
+  "auth.emailLabel": "Email",
+  "auth.emailPlaceholder": "you@example.com",
+  "auth.passwordLabel": "Password",
+  "auth.passwordPlaceholder": "Password",
+  "auth.submit": "Sign in",
+  "auth.loading": "Checking session...",
+  "auth.logout": "Sign out",
+  "auth.forbiddenDismiss": "Dismiss",
+
+  "app.loadingCache": "Loading local cache...",
+
+  "network.online": "Online",
+  "network.offline": "Offline",
+  "network.pending": "{{count}} pending mutation(s)",
+  "network.conflict": "Conflict to resolve",
+
   "bookList.kicker": "BookList Pro",
   "bookList.title": "Books",
   "bookList.add": "Add",

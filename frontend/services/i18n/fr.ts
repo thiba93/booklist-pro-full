@@ -19,6 +19,23 @@ export const fr = {
 
   "appError.title": "Une erreur est survenue.",
 
+  "auth.title": "Connexion",
+  "auth.emailLabel": "Email",
+  "auth.emailPlaceholder": "vous@exemple.fr",
+  "auth.passwordLabel": "Mot de passe",
+  "auth.passwordPlaceholder": "Mot de passe",
+  "auth.submit": "Se connecter",
+  "auth.loading": "Verification de la session...",
+  "auth.logout": "Se deconnecter",
+  "auth.forbiddenDismiss": "Fermer",
+
+  "app.loadingCache": "Chargement du cache local...",
+
+  "network.online": "En ligne",
+  "network.offline": "Hors ligne",
+  "network.pending": "{{count}} mutation(s) en attente",
+  "network.conflict": "Conflit a resoudre",
+
   "bookList.kicker": "BookList Pro",
   "bookList.title": "Ouvrages",
   "bookList.add": "Ajouter",
