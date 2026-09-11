@@ -186,6 +186,20 @@ Laisse de cote faute de temps.
 
 ---
 
+## Choses apprises après la présentation
+
+### Mon apprentissage (thiba93)
+
+- J'ai consolidé ma compréhension du cycle CRUD en React (`Create`, `Read`, `Update`, `Delete`) et de la façon dont les données circulent entre l'interface, la logique métier et l'API.
+- J'ai appris à structurer proprement les appels API via une couche de services, puis à les consommer depuis les écrans avec des hooks pour garder une architecture lisible.
+- J'ai compris l'importance de gérer les états asynchrones (`chargement`, `succès`, `erreur`) afin de rendre le parcours utilisateur plus fiable.
+- J'ai progressé dans la séparation des responsabilités entre composants UI, hooks, services, types et styles pour rendre le code maintenable.
+- J'ai amélioré ma capacité à diagnostiquer une régression en suivant la chaîne : appel API -> mutation d'état -> re-render.
+- J'ai retenu la nécessité de normaliser les données et de valider les entrées avant affichage.
+- J'ai confirmé la valeur d'une architecture modulaire et de composants réutilisables pour faire évoluer sereinement l'application.
+
+---
+
 ## Tests et validation
 
 ```bash
