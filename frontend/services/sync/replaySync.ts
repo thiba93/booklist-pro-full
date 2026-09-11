@@ -10,8 +10,24 @@ import {
   retirerMutation
 } from "./mutationQueue";
 
+/**
+ * Rejeu de la file de mutations hors ligne (services/sync/mutationQueue.ts)
+ * vers l'API reelle des le retour du reseau. Deux strategies distinctes
+ * cote serveur :
+ * - Ouvrages : un seul POST /sync par lot, idempotent par id de mutation.
+ * - Notes : pas d'endpoint batch cote serveur -> rejeu sequentiel un par un
+ *   sur les endpoints REST existants (POST/DELETE .../notes).
+ * Voir docs/ADR/003-resolution-conflits.md pour la strategie de resolution
+ * des conflits (409) rencontres pendant le rejeu des ouvrages.
+ */
+
+// Une seule passe de retry immediat apres un rebase (voir executerRejeu) :
+// suffisant pour le cas courant (conflit resolu par la comparaison LWW),
+// evite une boucle infinie si un rebase reconflit aussitot (concurrence
+// tres active sur le meme livre).
 const PROFONDEUR_MAX_REJEU = 1;
 
+/** Traduit une mutation de la file interne vers le format attendu par POST /sync. */
 function versMutationSync(mutation: MutationOuvrage): SyncMutation {
   const charge = mutation.mutation;
 
@@ -36,6 +52,13 @@ function versMutationSync(mutation: MutationOuvrage): SyncMutation {
   };
 }
 
+/**
+ * Distingue une panne reseau (a retenter plus tard, sans perdre la
+ * mutation) d'un echec definitif du serveur (422 invalide, etc., a marquer
+ * "erreur" et laisser de cote). ApiError n'est pas importe directement ici
+ * pour eviter un couplage supplementaire ; le duck-typing sur `.type`
+ * suffit et reste stable (voir services/api/apiErrors.ts).
+ */
 function estErreurReseau(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { type?: unknown }).type === "ErreurReseau";
 }

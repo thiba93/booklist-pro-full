@@ -2,6 +2,15 @@ import type { BookCreatePayload, BookUpdatePayload } from "../api/booksApi";
 import { readPersistedValue, writePersistedValue } from "../storage/persistedValue";
 import type { MutationHorsLigne, StatutMutation } from "../../domain/sync/offlineMutation";
 
+/**
+ * File des mutations creees hors ligne (ou en ligne mais pas encore
+ * confirmees), persistee et rejouee par services/sync/replaySync.ts.
+ * Module singleton (pas un contexte React) : accessible aussi bien depuis
+ * des hooks (features/books/useBooksQueries.ts) que depuis du code hors
+ * composant (replaySync.ts). L'etat vit uniquement en memoire ; `file` est
+ * synchronisee vers le storage a chaque mutation via `persister()` et
+ * relue au demarrage via `chargerFileMutations()`.
+ */
 const STORAGE_KEY = "booklistpro.mutation-queue";
 
 type Ecouteur = (file: readonly MutationHorsLigne[]) => void;

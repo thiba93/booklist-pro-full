@@ -32,6 +32,8 @@ export function BookListScreen({ onCreate, onOpenBook }: BookListScreenProps) {
   const { theme } = useThemeMode();
   const { t } = useTranslation();
   const styles = createStyles(theme);
+  // Role lecteur : le bouton "Ajouter" est masque et BookRows recoit
+  // canWrite=false pour cacher ses propres actions d'ecriture par ligne.
   const { canWrite } = useAuth();
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");

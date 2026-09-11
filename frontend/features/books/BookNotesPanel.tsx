@@ -17,6 +17,8 @@ export function BookNotesPanel({ bookId }: BookNotesPanelProps) {
   const { theme } = useThemeMode();
   const { t } = useTranslation();
   const styles = createStyles(theme);
+  // Lecteur : ni le champ de saisie ni le bouton "ajouter" ne s'affichent
+  // plus bas, et chaque note perd son bouton de suppression.
   const { canWrite } = useAuth();
   const notes = useBookNotes(bookId);
   const createNote = useCreateBookNote(bookId);

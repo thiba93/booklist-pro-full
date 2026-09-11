@@ -51,11 +51,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [forbiddenMessage, setForbiddenMessage] = useState<string | null>(null);
 
+  // httpClient ne connait pas AuthProvider (couplage a sens unique voulu,
+  // voir ADR 0001) : il expose un simple callback global pour signaler un
+  // 403, que ce Provider ecoute ici pour afficher un message clair quel
+  // que soit l'ecran a l'origine de l'appel (voir ForbiddenBanner).
   useEffect(() => {
     onApiForbidden((error: ApiError) => setForbiddenMessage(error.message));
     return () => onApiForbidden(null);
   }, []);
 
+  // Meme principe pour les jetons : httpClient notifie tout changement
+  // (login, refresh silencieux suite a un 401) sans savoir OU le
+  // refreshToken doit etre persiste. On ne persiste jamais l'accessToken
+  // (duree de vie trop courte pour valoir la peine, voir doc de la
+  // fonction ci-dessous) : la reconnexion au demarrage repart toujours
+  // d'un refresh.
   useEffect(() => {
     onApiAuthTokensChange((tokens) => {
       if (tokens?.refreshToken) {
@@ -96,6 +106,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // loginRequest (POST /auth/login) place deja les jetons dans httpClient
+  // et declenche donc, via l'effet ci-dessus, la persistance du
+  // refreshToken. On enchaine avec GET /me pour recuperer le role - le
+  // login seul ne renvoie pas authRequise, necessaire pour meSchema.
   const login = useCallback(async (payload: LoginPayload) => {
     setLoginError(null);
 
@@ -105,11 +119,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(me);
       setStatus("authenticated");
     } catch (error) {
+      // Rethrow : LoginScreen affiche deja loginError, mais a aussi besoin
+      // de savoir que l'appel a echoue (pour arreter son propre spinner
+      // local) sans dupliquer la logique d'extraction du message ici.
       setLoginError(messageFromError(error));
       throw error;
     }
   }, []);
 
+  // logoutRequest est synchrone (efface juste les jetons en memoire, voir
+  // httpClient.clearApiAuthTokens) : aucune requete serveur n'existe pour
+  // invalider un refreshToken cote API, la deconnexion est donc purement
+  // locale.
   const logout = useCallback(() => {
     logoutRequest();
     void removePersistedValue(REFRESH_TOKEN_KEY);
@@ -124,6 +145,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       status,
       user,
+      // Liste blanche explicite (=== "editeur") plutot que !== "lecteur" :
+      // un role inconnu/futur reste sans droit d'ecriture par defaut. Ceci
+      // ne fait que masquer l'UI - le serveur revalide chaque ecriture
+      // (403 si le role n'a pas les droits), voir ForbiddenBanner.
       canWrite: user?.role === "editeur",
       loginError,
       forbiddenMessage,

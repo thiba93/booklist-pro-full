@@ -24,6 +24,9 @@ export function BookDetailScreen({ id, onBack, onDeleted, onEdit }: BookDetailSc
   const { theme } = useThemeMode();
   const { t } = useTranslation();
   const styles = createStyles(theme);
+  // Role lecteur : le bloc entier d'actions d'ecriture (modifier, marquer
+  // lu, favori, supprimer) est masque plus bas, pas seulement desactive -
+  // consigne "aucune action d'ecriture visible" du role lecteur.
   const { canWrite } = useAuth();
   const book = useBookDetail(id);
   const patchBook = usePatchBook();

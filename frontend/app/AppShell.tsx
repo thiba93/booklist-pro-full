@@ -38,6 +38,12 @@ const queryClient = new QueryClient({
 });
 
 export function AppShell() {
+  // Bloque le premier rendu jusqu'a ce que le cache local (dernieres
+  // reponses reussies, voir services/storage/queryPersister.ts) ET la file
+  // de mutations en attente (services/sync/mutationQueue.ts) soient
+  // relus depuis le storage - sinon un ecran monte trop tot verrait des
+  // listes vides ou un compteur "mutations en attente" a zero le temps que
+  // la lecture asynchrone se termine.
   const [isCacheReady, setIsCacheReady] = useState(false);
 
   useEffect(() => {
@@ -49,6 +55,9 @@ export function AppShell() {
       }
     });
 
+    // Persistance continue (pas seulement au demarrage) : chaque succes de
+    // requete "books" est sauvegarde des qu'il arrive, pour que le cache
+    // relu au prochain lancement soit a jour.
     const arreterPersistance = persistQueryClient(queryClient);
 
     return () => {
@@ -97,16 +106,19 @@ const styles = StyleSheet.create({
   }
 });
 
+/** Bandeau permanent (en dehors de AuthProvider : visible meme sur l'ecran de connexion). */
 function ConnectivityBar() {
   const { conflit, enAttente } = useMutationQueueStatus();
   return <NetworkStatusBar hasConflict={conflit} pendingCount={enAttente} />;
 }
 
+/** Composant sans rendu : ne fait que brancher l'effet de rejeu automatique (voir useSyncReplay). */
 function SyncReplayEffect() {
   useSyncReplay();
   return null;
 }
 
+/** Aiguillage ecran de connexion / contenu selon l'etat de session (voir AuthProvider). */
 function AuthGate() {
   const { status } = useAuth();
 

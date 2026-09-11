@@ -7,6 +7,13 @@ import { useThemeMode } from "../../theme/ThemeProvider";
 import { useAuth } from "./AuthProvider";
 import { createStyles } from "./LoginScreen.styles";
 
+/**
+ * Ecran de connexion, affiche par AppShell tant que la session n'est pas
+ * authentifiee (voir features/auth/AuthProvider.tsx). Purement controle :
+ * toute la logique reseau (POST /auth/login, persistance du refreshToken)
+ * vit dans AuthProvider, ce composant ne fait que collecter email/mot de
+ * passe et refleter l'etat de soumission.
+ */
 export function LoginScreen() {
   const { theme } = useThemeMode();
   const { t } = useTranslation();
@@ -14,6 +21,9 @@ export function LoginScreen() {
   const { login, loginError } = useAuth();
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
+  // Etat de soumission local (distinct de loginError, qui vit dans
+  // AuthProvider) : desactive le bouton et affiche un spinner pendant
+  // l'appel, sans attendre un re-render declenche par le contexte.
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canSubmit = email.trim().length > 0 && motDePasse.length > 0 && !isSubmitting;
@@ -24,7 +34,11 @@ export function LoginScreen() {
     try {
       await login({ email, motDePasse });
     } catch {
-      // loginError est deja mis a jour par AuthProvider.
+      // Rien a faire ici : en cas d'echec (identifiants invalides, panne
+      // reseau), AuthProvider.login a deja mis loginError a jour et ce
+      // composant l'affiche via {loginError ? ... : null} plus bas. On
+      // avale l'erreur pour ne pas la laisser remonter en promesse rejetee
+      // non geree jusqu'au onPress du bouton.
     } finally {
       setIsSubmitting(false);
     }

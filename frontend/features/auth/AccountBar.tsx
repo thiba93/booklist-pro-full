@@ -5,6 +5,13 @@ import { useThemeMode } from "../../theme/ThemeProvider";
 import type { Theme } from "../../theme/theme";
 import { useAuth } from "./AuthProvider";
 
+/**
+ * Petit indicateur de session : email du compte connecte + bouton de
+ * deconnexion. Affiche uniquement quand un utilisateur est authentifie
+ * (rend `null` sinon, ex. pendant la restauration de session au demarrage)
+ * pour eviter un flash "aucun email" avant que AuthProvider ait resolu
+ * l'etat initial.
+ */
 export function AccountBar() {
   const { theme } = useThemeMode();
   const { t } = useTranslation();

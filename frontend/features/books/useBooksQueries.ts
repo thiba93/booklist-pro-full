@@ -29,6 +29,25 @@ import {
   supprimerOuvrageHorsLigne
 } from "./offlineBookMutations";
 
+/**
+ * Hooks CRUD sur les ouvrages. Chaque mutation suit le meme schema :
+ * `if (estEnLigne()) { <appel API reel> } else { <equivalent hors ligne> }`
+ * dans mutationFn (voir features/books/offlineBookMutations.ts pour la
+ * partie hors ligne), pour que React Query n'ait jamais a savoir si l'appel
+ * a vraiment touche le reseau. Cote React Query, `networkMode: "always"`
+ * est indispensable sur les mutations (voir app/AppShell.tsx) : sans lui,
+ * React Query intercepte l'appel AVANT meme d'atteindre ce mutationFn des
+ * qu'il detecte le navigateur hors ligne, empechant purement et simplement
+ * la branche offline ci-dessous de s'executer.
+ */
+
+/**
+ * Une edition/suppression hors ligne d'un ouvrage jamais encore consulte
+ * n'a pas de version de reference en cache pour construire le resultat
+ * local ni enfiler une mutation coherente. Cas limite improbable en usage
+ * normal (le formulaire d'edition charge toujours la fiche au prealable)
+ * mais mieux vaut un message clair qu'un plantage silencieux.
+ */
 function erreurHorsLigneSansCache(): Error {
   return new Error("Ouvrage indisponible hors ligne : ouvrez-le au moins une fois en ligne d'abord.");
 }
@@ -173,6 +192,7 @@ export function usePatchBook() {
   });
 }
 
+// { horsLigne, id } indique a onSuccess la branche prise, sans re-tester estEnLigne().
 export function useDeleteBook() {
   const queryClient = useQueryClient();
 

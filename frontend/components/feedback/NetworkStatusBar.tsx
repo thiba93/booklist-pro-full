@@ -11,10 +11,13 @@ type NetworkStatusBarProps = {
 };
 
 /**
- * Indicateur permanent (toujours affiche, en ligne ou non) de l'etat de la
- * synchronisation : connectivite, mutations hors ligne en attente, et
- * conflits a resoudre. `pendingCount`/`hasConflict` seront alimentes par la
- * file de mutations (etape suivante) ; en attendant ils restent a defaut.
+ * Indicateur permanent (toujours affiche, en ligne ou non, y compris sur
+ * l'ecran de connexion - voir app/AppShell.tsx) de l'etat de la
+ * synchronisation : connectivite (services/reseau.ts via useNetworkStatus),
+ * mutations hors ligne en attente et conflits a resoudre
+ * (services/sync/useMutationQueueStatus.ts cote appelant). Ce composant
+ * reste purement d'affichage : `pendingCount`/`hasConflict` sont passes en
+ * props plutot que lus ici, pour rester testable sans mutationQueue.
  */
 export function NetworkStatusBar({ hasConflict = false, pendingCount = 0 }: NetworkStatusBarProps) {
   const isOnline = useNetworkStatus();
@@ -43,6 +46,11 @@ function createStyles(theme: Theme, isOnline: boolean, hasConflict: boolean) {
   return StyleSheet.create({
     bar: {
       alignItems: "center",
+      // alignSelf + width explicites : sans eux, sur le web, ce View perd
+      // sa largeur des qu'il n'a pas de parent garantissant
+      // flexDirection:"column" (voir le commentaire sur `styles.root` dans
+      // AppShell.tsx) - bug reellement rencontre, corrige ici plutot que
+      // de compter sur le parent.
       alignSelf: "stretch",
       backgroundColor: hasConflict
         ? theme.colors.danger

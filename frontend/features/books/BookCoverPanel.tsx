@@ -19,6 +19,8 @@ export function BookCoverPanel({ book }: BookCoverPanelProps) {
   const { theme } = useThemeMode();
   const { t } = useTranslation();
   const styles = createStyles(theme);
+  // Lecteur : ni le bouton "changer" ni "supprimer" ne s'affichent, la
+  // couverture reste consultable en lecture seule.
   const { canWrite } = useAuth();
   const uploadCover = useUploadBookCover(book.id);
   const deleteCover = useDeleteBookCover(book.id);

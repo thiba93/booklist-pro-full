@@ -75,6 +75,12 @@ export function SortSegments(props: { sort: SortField; onChange: (sort: SortFiel
 
 type BookRowProps = {
   book: Book;
+  /**
+   * Role editeur (true) affiche les actions d'ecriture (marquer lu,
+   * favori) ; role lecteur (false) n'affiche que la valeur en lecture
+   * seule. Par defaut true pour ne pas casser les appelants/tests qui ne
+   * connaissent pas encore le concept de role (voir features/auth).
+   */
   canWrite?: boolean | undefined;
   isMutating: boolean;
   onOpenBook: (id: string) => void;

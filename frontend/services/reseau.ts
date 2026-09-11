@@ -8,6 +8,7 @@
  */
 export type EcouteurReseau = (enLigne: boolean) => void;
 
+/** Lecture instantanee (non reactive) de l'etat reseau courant. */
 export function estEnLigne(): boolean {
   if (typeof navigator !== "undefined" && typeof navigator.onLine === "boolean") {
     return navigator.onLine;
@@ -16,6 +17,12 @@ export function estEnLigne(): boolean {
   return true;
 }
 
+/**
+ * Abonnement reactif aux transitions online/offline. Retourne toujours une
+ * fonction de desabonnement (no-op si `window` n'existe pas, ex. rendu
+ * serveur) pour que l'appelant n'ait pas a distinguer les deux cas dans un
+ * useEffect.
+ */
 export function ecouterReseau(ecouteur: EcouteurReseau): () => void {
   if (typeof window === "undefined" || typeof window.addEventListener !== "function") {
     return () => undefined;
